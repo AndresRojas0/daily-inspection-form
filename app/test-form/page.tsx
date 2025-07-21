@@ -220,8 +220,13 @@ export default function DailyInspectionApp() {
   const parseGpsVariance = (value: string): number => {
     if (!value) return 0
 
-    // Remove parentheses if present, e.g., (+02:30) -> +02:30
-    const gpsString = value.replace(/^$$([+-]?\d+:?\d*)$$$/, "$1")
+    let gpsString = value.trim()
+
+    // Remove parentheses if present, e.g., "(+02:30)" -> "+02:30"
+    const parenMatch = gpsString.match(/^$$(.*)$$$/)
+    if (parenMatch && parenMatch[1]) {
+      gpsString = parenMatch[1]
+    }
 
     const match = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
     if (match) {

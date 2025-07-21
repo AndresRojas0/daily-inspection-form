@@ -96,14 +96,15 @@ const parseGpsVariance = (gpsValue: any): number => {
   let gpsString = gpsValue.toString().trim()
   console.log(`parseGpsVariance: Original input string: "${gpsString}"`)
 
-  // Remove parentheses if present: (+mm:ss) or (-mm:ss)
-  const parenMatch = gpsString.match(/^$$([+-]?\d+:?\d*)$$$/)
+  // Step 1: Remove outer parentheses if they exist, e.g., "(+02:30)" -> "+02:30"
+  // Corrected regex: use escaped parentheses $$ and $$
+  const parenMatch = gpsString.match(/^$$(.*)$$$/)
   if (parenMatch && parenMatch[1]) {
     gpsString = parenMatch[1]
-    console.log(`parseGpsVariance: After removing parentheses: "${gpsString}"`)
+    console.log(`parseGpsVariance: After removing outer parentheses: "${gpsString}"`)
   }
 
-  // Try to parse as mm:ss format
+  // Step 2: Try to parse as mm:ss format (e.g., "+02:30", "-01:45")
   const timeMatch = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
   if (timeMatch) {
     const sign = timeMatch[1] === "-" ? -1 : 1
@@ -116,7 +117,7 @@ const parseGpsVariance = (gpsValue: any): number => {
     return sign * totalMinutes
   }
 
-  // Try to parse as mm format (e.g., "+5", "-3", "10")
+  // Step 3: Try to parse as mm format (e.g., "+5", "-3", "10")
   const minuteMatch = gpsString.match(/^([+-]?)(\d+)$/)
   if (minuteMatch) {
     const sign = minuteMatch[1] === "-" ? -1 : 1
@@ -125,7 +126,7 @@ const parseGpsVariance = (gpsValue: any): number => {
     return sign * minutes
   }
 
-  // Fallback: Try to parse as a regular float
+  // Fallback: Try to parse as a regular float (e.g., "2.5", "-1.75")
   const numValue = Number.parseFloat(gpsString)
   if (!isNaN(numValue)) {
     console.log(`parseGpsVariance: Fallback to float parsing, returning ${numValue}.`)
