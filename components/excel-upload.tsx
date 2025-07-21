@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, X } from "lucide-react"
-import { processExcelFile } from "@/lib/excel-processor"
+import { processExcelFile } from "@/lib/excel-processor" // Correctly import the Server Action
 
 interface ExcelUploadProps {
   onDataLoaded: (data: any) => void
@@ -34,9 +34,9 @@ export function ExcelUpload({ onDataLoaded, onClose }: ExcelUploadProps) {
 
     try {
       const arrayBuffer = await file.arrayBuffer()
-      const result = await processExcelFile(arrayBuffer)
+      const result = await processExcelFile(arrayBuffer) // Call the Server Action
 
-      console.log("Excel processing result:", result) // Add this debug log
+      console.log("Excel processing result:", result) // Debug log
       console.log(
         "Service checks with observations:",
         result.data?.serviceChecks?.map((check) => ({
@@ -44,7 +44,7 @@ export function ExcelUpload({ onDataLoaded, onClose }: ExcelUploadProps) {
           observations: check.observations,
           hasObservations: !!check.observations && check.observations.trim() !== "",
         })),
-      ) // Add this debug log
+      ) // Debug log
 
       setResult(result)
 

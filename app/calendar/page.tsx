@@ -1,42 +1,32 @@
 import { getDailyInspectionFormsForCalendar } from "@/lib/actions"
 import { CalendarView } from "@/components/calendar-view"
-import { Button } from "@/components/ui/button"
-import { ArrowLeft } from "lucide-react"
-import Link from "next/link"
 
 export default async function CalendarPage() {
-  // Get forms for the current year (you can adjust this range as needed)
-  const currentYear = new Date().getFullYear()
-  const startDate = `${currentYear}-01-01`
-  const endDate = `${currentYear}-12-31`
+  const result = await getDailyInspectionFormsForCalendar()
+  const forms = result.success ? result.data : []
 
-  const formsResult = await getDailyInspectionFormsForCalendar(startDate, endDate)
-  const forms = formsResult.success ? formsResult.data : []
+  // Log the forms received for debugging
+  console.log("Calendar received forms:", forms)
+
+  // Group forms by date for the calendar component
+  const formsGroupedByDate = forms.reduce((acc: Record<string, any[]>, form: any) => {
+    const dateKey = new Date(form.date).toDateString() // Use toDateString for consistent grouping
+    if (!acc[dateKey]) {
+      acc[dateKey] = []
+    }
+    acc[dateKey].push(form)
+    return acc
+  }, {})
+
+  // Log the grouped forms for debugging
+  console.log("Forms grouped by date:", formsGroupedByDate)
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
-      <div className="mx-auto max-w-6xl space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard">
-              <Button variant="ghost" size="sm">
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Back to Dashboard
-              </Button>
-            </Link>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Calendar View</h1>
-              <p className="text-gray-600">Visual overview of daily inspection forms</p>
-            </div>
-          </div>
-          <Link href="/">
-            <Button>New Inspection</Button>
-          </Link>
-        </div>
-
-        {/* Calendar Component */}
-        <CalendarView forms={forms} />
+      <div className="mx-auto max-w-4xl space-y-6">
+        <h1 className="text-3xl font-bold text-center text-blue-900">Inspection Calendar</h1>
+        <p className="text-center text-gray-600">Visualize your daily inspection forms by date.</p>
+        <CalendarView forms={formsGroupedByDate} />
       </div>
     </div>
   )

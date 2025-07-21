@@ -2,6 +2,54 @@
 
 import * as XLSX from "xlsx"
 
+interface ProcessedServiceCheck {
+  id: string
+  lineOrRouteNumber: string
+  driverName: string
+  serviceCode: string
+  fleetCoachNumber: string
+  exactHourOfArrival: string
+  gpsStatus: {
+    minutes: number
+    status: "on-time" | "early" | "late"
+  }
+  passengersOnBoard: number
+  passesUsed: number
+  addressOfStop: string
+  observations: string
+  nonCompliance: boolean
+}
+
+interface ProcessedFormHeader {
+  title: string
+  inspectorName: string
+  date: string
+  placeOfWork: string
+}
+
+interface ProcessedExcelData {
+  formHeader: ProcessedFormHeader
+  serviceChecks: ProcessedServiceCheck[]
+}
+
+interface ExcelRow {
+  inspectorName?: string
+  date?: string
+  placeOfWork?: string
+  direction?: string
+  lineOrRouteNumber?: string
+  driverName?: string
+  serviceCode?: string
+  fleetCoachNumber?: string
+  exactHourOfArrival?: string
+  gpsMinutes?: number
+  passengersOnBoard?: number
+  passesUsed?: number
+  addressOfStop?: string
+  observations?: string
+  nonCompliance?: boolean
+}
+
 // Mapping from Spanish field names to our form fields (case-insensitive)
 const HEADER_ROW_MAPPING = {
   apellido: "inspectorName",
@@ -25,7 +73,6 @@ const COLUMN_MAPPING = {
   observación: "observations", // With accent (singular)
   observaciones: "observations", // With accent (plural)
   observacion: "observations", // Without accent (singular)
-  observaciones: "observations", // Without accent (plural) - duplicate but kept for safety
   notas: "observations", // Alternative word for notes
   comentarios: "observations", // Alternative word for comments
   infracción: "nonCompliance", // Non-compliance with accent
@@ -33,31 +80,8 @@ const COLUMN_MAPPING = {
   incumplimiento: "nonCompliance", // Alternative word
 }
 
-interface ExcelRow {
-  inspectorName?: string
-  date?: string
-  placeOfWork?: string
-  direction?: string
-  lineOrRouteNumber?: string
-  driverName?: string
-  serviceCode?: string
-  fleetCoachNumber?: string
-  exactHourOfArrival?: string
-  gpsMinutes?: number
-  passengersOnBoard?: number
-  passesUsed?: number
-  addressOfStop?: string
-  observations?: string
-  nonCompliance?: boolean
-}
-
-function calculateGpsStatus(minutes: number): "on-time" | "early" | "late" {
-  if (minutes < 0) return "late"
-  if (minutes >= 2) return "early"
-  return "on-time"
-}
-
-function parseGpsVariance(gpsValue: any): number {
+// Helper function to parse GPS variance from various formats
+const parseGpsVariance = (gpsValue: any): number => {
   if (!gpsValue) return 0
 
   let gpsString = gpsValue.toString().trim()
@@ -102,14 +126,23 @@ function parseGpsVariance(gpsValue: any): number {
   return isNaN(numValue) ? 0 : numValue
 }
 
-function detectNonComplianceFromObservations(observations: string): boolean {
+// Helper function to determine GPS status
+const calculateGpsStatus = (minutes: number): "on-time" | "early" | "late" => {
+  if (minutes < 0) return "late"
+  if (minutes >= 2) return "early"
+  return "on-time"
+}
+
+// Helper function to detect non-compliance from observations
+const detectNonComplianceFromObservations = (observations: string): boolean => {
   if (!observations) return false
 
   const observationsLower = observations.toLowerCase()
   return observationsLower.includes("informe")
 }
 
-function formatTime(timeValue: any): string {
+// Helper function to format time from various formats
+const formatTime = (timeValue: any): string => {
   if (!timeValue) return ""
 
   // Handle different time formats
@@ -134,7 +167,8 @@ function formatTime(timeValue: any): string {
   return ""
 }
 
-function formatDate(dateValue: any): string {
+// Helper function to format date from various formats
+const formatDate = (dateValue: any): string => {
   if (!dateValue) return ""
 
   // Handle different date formats
@@ -160,11 +194,13 @@ function formatDate(dateValue: any): string {
   return ""
 }
 
-function normalizeText(text: string): string {
+// Helper function to normalize text
+const normalizeText = (text: string): string => {
   return text.toLowerCase().trim().replace(/\s+/g, "")
 }
 
-function findHeaderInfo(rawData: any[][]): { [key: string]: any } {
+// Helper function to find header information from rows
+const findHeaderInfo = (rawData: any[][]): { [key: string]: any } => {
   const headerInfo: { [key: string]: any } = {}
 
   // Look through the first several rows to find header information
@@ -194,7 +230,8 @@ function findHeaderInfo(rawData: any[][]): { [key: string]: any } {
   return headerInfo
 }
 
-function findDataStartRow(rawData: any[][]): number {
+// Helper function to find where the service data starts
+const findDataStartRow = (rawData: any[][]): number => {
   // Look for a row that contains column headers for service data
   for (let i = 0; i < rawData.length; i++) {
     const row = rawData[i]

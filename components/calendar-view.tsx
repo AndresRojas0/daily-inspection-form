@@ -1,10 +1,13 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Alert, AlertDescription } from "@/components/ui/alert"
+import { format } from "date-fns"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { ArrowRight } from "lucide-react"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,18 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import {
-  ChevronLeft,
-  ChevronRight,
-  Calendar,
-  FileText,
-  Users,
-  Clock,
-  Trash2,
-  CheckCircle,
-  AlertCircle,
-} from "lucide-react"
-import Link from "next/link"
+import { Trash2, CheckCircle, AlertCircle } from "lucide-react"
 import { deleteDailyInspectionForm } from "@/lib/actions"
 
 interface CalendarForm {
@@ -39,32 +31,36 @@ interface CalendarForm {
 }
 
 interface CalendarViewProps {
-  forms: CalendarForm[]
+  forms: Record<string, CalendarForm[]> // Forms grouped by date string
 }
 
-export function CalendarView({ forms: initialForms }: CalendarViewProps) {
-  const [currentDate, setCurrentDate] = useState(new Date())
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
-  const [forms, setForms] = useState(initialForms)
+export function CalendarView({ forms }: CalendarViewProps) {
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [formToDelete, setFormToDelete] = useState<CalendarForm | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteResult, setDeleteResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  console.log("Calendar received forms:", forms) // Debug log
+  const handleDateSelect = (date: Date | undefined) => {
+    setSelectedDate(date)
+  }
 
-  // Group forms by date
-  const formsByDate = forms.reduce(
-    (acc, form) => {
-      const date = form.date
-      if (!acc[date]) {
-        acc[date] = []
-      }
-      acc[date].push(form)
-      return acc
+  const modifiers = {
+    hasForms: (date: Date) => {
+      const dateKey = date.toDateString()
+      return forms[dateKey] && forms[dateKey].length > 0
     },
-    {} as Record<string, CalendarForm[]>,
-  )
+  }
+
+  const modifiersStyles = {
+    hasForms: {
+      backgroundColor: "hsl(var(--primary))", // Tailwind's primary color
+      color: "hsl(var(--primary-foreground))", // Tailwind's primary-foreground color
+    },
+  }
+
+  const selectedDateKey = selectedDate ? selectedDate.toDateString() : undefined
+  const formsForSelectedDate = selectedDateKey ? forms[selectedDateKey] : []
 
   const handleDeleteClick = (form: CalendarForm) => {
     setFormToDelete(form)
@@ -83,14 +79,9 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
 
       if (result.success) {
         // Remove the deleted form from the local state
-        setForms((prevForms) => prevForms.filter((form) => form.id !== formToDelete.id))
-
-        // Close dialog after a short delay
-        setTimeout(() => {
-          setDeleteDialogOpen(false)
-          setFormToDelete(null)
-          setDeleteResult(null)
-        }, 1500)
+        setSelectedDate(undefined)
+        setFormToDelete(null)
+        setDeleteResult(null)
       }
     } catch (error) {
       setDeleteResult({
@@ -102,255 +93,62 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
     }
   }
 
-  console.log("Forms grouped by date:", formsByDate) // Debug log
-
-  // Get calendar data for current month
-  const year = currentDate.getFullYear()
-  const month = currentDate.getMonth()
-  const firstDay = new Date(year, month, 1)
-  const lastDay = new Date(year, month + 1, 0)
-  const startDate = new Date(firstDay)
-  startDate.setDate(startDate.getDate() - firstDay.getDay()) // Start from Sunday
-
-  const calendarDays = []
-  const currentCalendarDate = new Date(startDate)
-
-  // Generate 42 days (6 weeks) for the calendar grid
-  for (let i = 0; i < 42; i++) {
-    const dateString = currentCalendarDate.toISOString().split("T")[0]
-    const isCurrentMonth = currentCalendarDate.getMonth() === month
-    const isToday = dateString === new Date().toISOString().split("T")[0]
-    const dayForms = formsByDate[dateString] || []
-
-    calendarDays.push({
-      date: new Date(currentCalendarDate),
-      dateString,
-      isCurrentMonth,
-      isToday,
-      forms: dayForms,
-      formCount: dayForms.length,
-    })
-
-    currentCalendarDate.setDate(currentCalendarDate.getDate() + 1)
-  }
-
-  const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ]
-
-  const navigateMonth = (direction: "prev" | "next") => {
-    setCurrentDate((prev) => {
-      const newDate = new Date(prev)
-      if (direction === "prev") {
-        newDate.setMonth(newDate.getMonth() - 1)
-      } else {
-        newDate.setMonth(newDate.getMonth() + 1)
-      }
-      return newDate
-    })
-    setSelectedDate(null)
-  }
-
-  const goToToday = () => {
-    setCurrentDate(new Date())
-    setSelectedDate(new Date().toISOString().split("T")[0])
-  }
-
-  const selectedDateForms = selectedDate ? formsByDate[selectedDate] || [] : []
-
   return (
-    <div className="space-y-6">
-      {/* Delete Result Alert */}
-      {deleteResult && (
-        <Alert className={deleteResult.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
-          {deleteResult.success ? (
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          ) : (
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          )}
-          <AlertDescription className={deleteResult.success ? "text-green-800" : "text-red-800"}>
-            {deleteResult.message}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {/* Debug Info */}
-      {process.env.NODE_ENV === "development" && (
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardContent className="pt-4">
-            <p className="text-sm text-yellow-800">Debug: Total forms loaded: {forms.length}</p>
-            <p className="text-sm text-yellow-800">Dates with forms: {Object.keys(formsByDate).join(", ")}</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Calendar Header */}
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-600" />
-              <CardTitle>Inspection Calendar</CardTitle>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={goToToday}>
-                Today
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => navigateMonth("prev")}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <span className="font-medium min-w-[140px] text-center">
-                {monthNames[month]} {year}
-              </span>
-              <Button variant="ghost" size="sm" onClick={() => navigateMonth("next")}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-          <CardDescription>Click on any date to view inspection forms for that day</CardDescription>
+          <CardTitle>Select a Date</CardTitle>
         </CardHeader>
-        <CardContent>
-          {/* Calendar Grid */}
-          <div className="grid grid-cols-7 gap-1 mb-4">
-            {/* Day headers */}
-            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-              <div key={day} className="p-2 text-center text-sm font-medium text-gray-500">
-                {day}
-              </div>
-            ))}
-
-            {/* Calendar days */}
-            {calendarDays.map((day, index) => (
-              <button
-                key={index}
-                onClick={() => setSelectedDate(day.dateString)}
-                className={`
-                  relative p-2 h-16 text-left border rounded-lg transition-colors
-                  ${!day.isCurrentMonth ? "text-gray-300 bg-gray-50" : ""}
-                  ${day.isToday ? "border-blue-500 bg-blue-50" : "border-gray-200"}
-                  ${selectedDate === day.dateString ? "border-blue-600 bg-blue-100" : ""}
-                  ${day.formCount > 0 ? "hover:bg-green-50" : "hover:bg-gray-50"}
-                `}
-              >
-                <div className="text-sm font-medium">{day.date.getDate()}</div>
-                {day.formCount > 0 && (
-                  <div className="absolute bottom-1 right-1">
-                    <Badge variant="secondary" className="text-xs px-1 py-0 bg-green-100 text-green-800">
-                      {day.formCount}
-                    </Badge>
-                  </div>
-                )}
-                {day.isToday && <div className="absolute top-1 left-1 w-2 h-2 bg-blue-500 rounded-full"></div>}
-              </button>
-            ))}
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center gap-4 text-xs text-gray-600">
-            <div className="flex items-center gap-1">
-              <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-              <span>Today</span>
-            </div>
-            <div className="flex items-center gap-1">
-              <Badge variant="secondary" className="text-xs px-1 py-0 bg-green-100 text-green-800">
-                N
-              </Badge>
-              <span>Forms count</span>
-            </div>
-          </div>
+        <CardContent className="flex justify-center">
+          <Calendar
+            mode="single"
+            selected={selectedDate}
+            onSelect={handleDateSelect}
+            className="rounded-md border"
+            modifiers={modifiers}
+            modifiersStyles={modifiersStyles}
+          />
         </CardContent>
       </Card>
 
-      {/* Selected Date Details */}
-      {selectedDate && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Forms for{" "}
-              {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
-            </CardTitle>
-            <CardDescription>
-              {selectedDateForms.length === 0
-                ? "No inspection forms found for this date"
-                : `${selectedDateForms.length} inspection form${selectedDateForms.length > 1 ? "s" : ""} found`}
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {selectedDateForms.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No inspection forms for this date.</p>
-                <Link href="/">
-                  <Button className="mt-4 bg-transparent" variant="outline">
-                    Create New Form
+      <Card>
+        <CardHeader>
+          <CardTitle>
+            {selectedDate ? `Forms for ${format(selectedDate, "PPP")}` : "Select a date to view forms"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {selectedDate && formsForSelectedDate && formsForSelectedDate.length > 0 ? (
+            formsForSelectedDate.map((form) => (
+              <div key={form.id} className="border rounded-lg p-4 shadow-sm bg-white">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-lg">{form.inspector_name}</h3>
+                  <Badge variant="secondary">{form.service_checks_count} checks</Badge>
+                </div>
+                <p className="text-sm text-gray-600">Place: {form.place_of_work}</p>
+                <p className="text-sm text-gray-600">Submitted: {new Date(form.created_at).toLocaleDateString()}</p>
+                <Link href={`/dashboard/${form.id}`} passHref>
+                  <Button variant="link" className="p-0 h-auto mt-2">
+                    View Details <ArrowRight className="w-4 h-4 ml-1" />
                   </Button>
                 </Link>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleDeleteClick(form)}
+                  className="text-red-600 hover:text-red-800 hover:border-red-300 mt-2"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
               </div>
-            ) : (
-              <div className="space-y-4">
-                {selectedDateForms.map((form) => (
-                  <div
-                    key={form.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                  >
-                    <div className="space-y-1">
-                      <div className="font-medium flex items-center gap-2">
-                        <Users className="w-4 h-4 text-gray-500" />
-                        {form.inspector_name}
-                      </div>
-                      <div className="text-sm text-gray-600 flex items-center gap-2">
-                        <span>{form.place_of_work}</span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1">
-                          <FileText className="w-3 h-3" />
-                          {form.service_checks_count} checks
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        Created {new Date(form.created_at).toLocaleString()}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">{form.service_checks_count} checks</Badge>
-                      <Link href={`/dashboard/${form.id}`}>
-                        <Button variant="outline" size="sm">
-                          View Details
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteClick(form)}
-                        className="text-red-600 hover:text-red-800 hover:border-red-300"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
+            ))
+          ) : (
+            <div className="text-center text-gray-500 py-8">
+              {selectedDate ? "No forms submitted on this date." : "No date selected."}
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -373,16 +171,14 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
           </p>
 
           {deleteResult && (
-            <Alert className={deleteResult.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
+            <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm">
               {deleteResult.success ? (
                 <CheckCircle className="h-4 w-4 text-green-600" />
               ) : (
                 <AlertCircle className="h-4 w-4 text-red-600" />
               )}
-              <AlertDescription className={deleteResult.success ? "text-green-800" : "text-red-800"}>
-                {deleteResult.message}
-              </AlertDescription>
-            </Alert>
+              <span className={deleteResult.success ? "text-green-800" : "text-red-800"}>{deleteResult.message}</span>
+            </div>
           )}
 
           <AlertDialogFooter>

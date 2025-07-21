@@ -191,16 +191,19 @@ export default function DailyInspectionApp() {
   const parseGpsVariance = (value: string): number => {
     if (!value) return 0
 
-    const match = value.match(/^([+-]?)(\d+):(\d+)$/)
+    // Remove parentheses if present, e.g., (+02:30) -> +02:30
+    const gpsString = value.replace(/^$$([+-]?\d+:?\d*)$$$/, "$1")
+
+    const match = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
     if (match) {
       const sign = match[1] === "-" ? -1 : 1
-      const minutes = Number.parseInt(match[2]) || 0
-      const seconds = Number.parseInt(match[3]) || 0
+      const minutes = Number.parseInt(match[2], 10) || 0 // Use base 10 to handle leading zeros
+      const seconds = Number.parseInt(match[3], 10) || 0 // Use base 10 to handle leading zeros
       return sign * (minutes + seconds / 60)
     }
 
-    // Fallback to number parsing
-    return Number.parseFloat(value) || 0
+    // Fallback to number parsing for simple +mm or -mm
+    return Number.parseFloat(gpsString) || 0
   }
 
   const isFormValid =
