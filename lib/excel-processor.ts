@@ -82,27 +82,32 @@ const COLUMN_MAPPING = {
 
 // Helper function to parse GPS variance from various formats
 const parseGpsVariance = (gpsValue: any): number => {
-  if (!gpsValue) return 0
+  if (gpsValue === null || gpsValue === undefined || gpsValue === "") {
+    console.log(`parseGpsVariance: Input is empty/null, returning 0.`)
+    return 0
+  }
 
   let gpsString = gpsValue.toString().trim()
+  console.log(`parseGpsVariance: Original input string: "${gpsString}"`)
 
   // Remove parentheses if present: (+mm:ss) or (-mm:ss)
-  gpsString = gpsString.replace(/^$$([+-]?\d+:?\d*)$$$/, "$1")
-
-  // Handle different GPS formats
-  // +mm, -mm, +mm:ss, -mm:ss, (+mm:ss), (-mm:ss)
+  const parenMatch = gpsString.match(/^$$([+-]?\d+:?\d*)$$$/)
+  if (parenMatch && parenMatch[1]) {
+    gpsString = parenMatch[1]
+    console.log(`parseGpsVariance: After removing parentheses: "${gpsString}"`)
+  }
 
   // Check if it contains a colon (mm:ss format)
   if (gpsString.includes(":")) {
-    // Updated regex to handle leading zeros: +02:30, -01:45, etc.
     const match = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
     if (match) {
       const sign = match[1] === "-" ? -1 : 1
-      // Parse integers to automatically handle leading zeros
-      const minutes = Number.parseInt(match[2], 10) || 0 // parseInt removes leading zeros
-      const seconds = Number.parseInt(match[3], 10) || 0 // parseInt removes leading zeros
-      // Convert to total minutes (with decimal for seconds)
+      const minutes = Number.parseInt(match[2], 10) || 0
+      const seconds = Number.parseInt(match[3], 10) || 0
       const totalMinutes = minutes + seconds / 60
+      console.log(
+        `parseGpsVariance: Parsed as mm:ss. Sign: ${sign}, Minutes: ${minutes}, Seconds: ${seconds}, Total: ${sign * totalMinutes}`,
+      )
       return sign * totalMinutes
     }
   } else {
@@ -110,20 +115,27 @@ const parseGpsVariance = (gpsValue: any): number => {
     const match = gpsString.match(/^([+-]?)(\d+)$/)
     if (match) {
       const sign = match[1] === "-" ? -1 : 1
-      // Parse integer to automatically handle leading zeros
-      const minutes = Number.parseInt(match[2], 10) || 0 // parseInt removes leading zeros
+      const minutes = Number.parseInt(match[2], 10) || 0
+      console.log(`parseGpsVariance: Parsed as mm. Sign: ${sign}, Minutes: ${minutes}, Total: ${sign * minutes}`)
       return sign * minutes
     }
   }
 
   // If it's already a number, use it directly
   if (typeof gpsValue === "number") {
+    console.log(`parseGpsVariance: Input was already a number, returning ${gpsValue}.`)
     return gpsValue
   }
 
-  // Try to parse as a regular number
+  // Fallback: Try to parse as a regular float
   const numValue = Number.parseFloat(gpsString)
-  return isNaN(numValue) ? 0 : numValue
+  if (!isNaN(numValue)) {
+    console.log(`parseGpsVariance: Fallback to float parsing, returning ${numValue}.`)
+    return numValue
+  }
+
+  console.warn(`parseGpsVariance: Could not parse "${gpsValue}", returning 0.`)
+  return 0
 }
 
 // Helper function to determine GPS status
@@ -147,7 +159,7 @@ const formatTime = (timeValue: any): string => {
 
   // Handle different time formats
   if (typeof timeValue === "string") {
-    // If it's already in HH:MM format
+    // If it's already in HH:MM:SS or HH:MM format
     if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(timeValue)) {
       return timeValue.length === 5 ? `${timeValue}:00` : timeValue
     }
