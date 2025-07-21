@@ -87,6 +87,12 @@ const parseGpsVariance = (gpsValue: any): number => {
     return 0
   }
 
+  // If it's already a number, use it directly
+  if (typeof gpsValue === "number") {
+    console.log(`parseGpsVariance: Input was already a number, returning ${gpsValue}.`)
+    return gpsValue
+  }
+
   let gpsString = gpsValue.toString().trim()
   console.log(`parseGpsVariance: Original input string: "${gpsString}"`)
 
@@ -97,34 +103,26 @@ const parseGpsVariance = (gpsValue: any): number => {
     console.log(`parseGpsVariance: After removing parentheses: "${gpsString}"`)
   }
 
-  // Check if it contains a colon (mm:ss format)
-  if (gpsString.includes(":")) {
-    const match = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
-    if (match) {
-      const sign = match[1] === "-" ? -1 : 1
-      const minutes = Number.parseInt(match[2], 10) || 0
-      const seconds = Number.parseInt(match[3], 10) || 0
-      const totalMinutes = minutes + seconds / 60
-      console.log(
-        `parseGpsVariance: Parsed as mm:ss. Sign: ${sign}, Minutes: ${minutes}, Seconds: ${seconds}, Total: ${sign * totalMinutes}`,
-      )
-      return sign * totalMinutes
-    }
-  } else {
-    // Handle +mm or -mm format (including leading zeros like +05, -03)
-    const match = gpsString.match(/^([+-]?)(\d+)$/)
-    if (match) {
-      const sign = match[1] === "-" ? -1 : 1
-      const minutes = Number.parseInt(match[2], 10) || 0
-      console.log(`parseGpsVariance: Parsed as mm. Sign: ${sign}, Minutes: ${minutes}, Total: ${sign * minutes}`)
-      return sign * minutes
-    }
+  // Try to parse as mm:ss format
+  const timeMatch = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
+  if (timeMatch) {
+    const sign = timeMatch[1] === "-" ? -1 : 1
+    const minutes = Number.parseInt(timeMatch[2], 10) || 0
+    const seconds = Number.parseInt(timeMatch[3], 10) || 0
+    const totalMinutes = minutes + seconds / 60
+    console.log(
+      `parseGpsVariance: Parsed as mm:ss. Sign: ${sign}, Minutes: ${minutes}, Seconds: ${seconds}, Total: ${sign * totalMinutes}`,
+    )
+    return sign * totalMinutes
   }
 
-  // If it's already a number, use it directly
-  if (typeof gpsValue === "number") {
-    console.log(`parseGpsVariance: Input was already a number, returning ${gpsValue}.`)
-    return gpsValue
+  // Try to parse as mm format (e.g., "+5", "-3", "10")
+  const minuteMatch = gpsString.match(/^([+-]?)(\d+)$/)
+  if (minuteMatch) {
+    const sign = minuteMatch[1] === "-" ? -1 : 1
+    const minutes = Number.parseInt(minuteMatch[2], 10) || 0
+    console.log(`parseGpsVariance: Parsed as mm. Sign: ${sign}, Minutes: ${minutes}, Total: ${sign * minutes}`)
+    return sign * minutes
   }
 
   // Fallback: Try to parse as a regular float
