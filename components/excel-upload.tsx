@@ -56,6 +56,7 @@ export function ExcelUpload({ onDataLoaded, onClose }: ExcelUploadProps) {
         }, 1500)
       }
     } catch (error) {
+      console.log(error)
       setResult({
         success: false,
         message: "Failed to process the Excel file. Please check the file format.",
@@ -137,7 +138,7 @@ export function ExcelUpload({ onDataLoaded, onClose }: ExcelUploadProps) {
                 <span>• Pasajeros</span>
                 <span>• Pases</span>
                 <span>• Parada</span>
-                <span>• Observaciones</span>
+                <span>• Observación</span>
               </div>
             </div>
 
