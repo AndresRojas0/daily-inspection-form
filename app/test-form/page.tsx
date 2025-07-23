@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import type { ReactElement } from "react"
 
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,6 +17,7 @@ import { CalendarIcon, PlusIcon, UploadIcon, TrashIcon } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { processExcelFile } from "@/lib/excel-processor"
 import { toast } from "@/components/ui/use-toast"
+import UsersIcon from "@/components/icons/UsersIcon"
 
 interface ServiceCheck {
   id: string
@@ -42,7 +44,7 @@ interface FormHeader {
   placeOfWork: string
 }
 
-export default function TestForm() {
+export default function TestForm(): ReactElement {
   const [formHeader, setFormHeader] = useState<FormHeader>({
     title: "DAILY INSPECTION FORM",
     inspectorName: "",
@@ -178,8 +180,14 @@ export default function TestForm() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 p-4 md:p-8">
-      <div className="mx-auto max-w-4xl space-y-6">
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
+      <h1 className="text-3xl font-bold text-gray-800 mb-4">Test Form Page</h1>
+      <p className="text-gray-600 text-lg">This is a placeholder page for testing purposes.</p>
+      <div className="mt-8 p-6 bg-white rounded-lg shadow-md">
+        <p className="text-gray-700">You can add specific test components or scenarios here.</p>
+        <p className="text-gray-700 mt-2">For now, it just confirms the route is working.</p>
+      </div>
+      <div className="mx-auto max-w-4xl space-y-6 mt-12">
         <Card>
           <CardHeader>
             <CardTitle className="text-center text-2xl font-bold text-blue-700">{formHeader.title}</CardTitle>
@@ -404,27 +412,5 @@ export default function TestForm() {
         </div>
       </div>
     </div>
-  )
-}
-
-function UsersIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <circle cx="9" cy="7" r="4" />
-      <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </svg>
   )
 }

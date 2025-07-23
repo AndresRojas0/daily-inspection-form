@@ -97,8 +97,7 @@ const parseGpsVariance = (gpsValue: any): number => {
   console.log(`parseGpsVariance: Original input string: "${gpsString}"`)
 
   // Step 1: Remove outer parentheses if they exist, e.g., "(+02:30)" -> "+02:30"
-  // Corrected regex: use escaped parentheses $$ and $$
-  const parenMatch = gpsString.match(/^$$(.*)$$$/)
+  const parenMatch = gpsString.match(/^$$(.*)$$$/) // Corrected regex for literal parentheses
   if (parenMatch && parenMatch[1]) {
     gpsString = parenMatch[1]
     console.log(`parseGpsVariance: After removing outer parentheses: "${gpsString}"`)
