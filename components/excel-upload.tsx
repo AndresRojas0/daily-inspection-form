@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, X } from "lucide-react"
-// import { processExcelFile } from "@/lib/excel-processor"
 import * as XLSX from "xlsx"
 
 // ---------- helpers that used to live in lib/excel-processor.ts ----------
+const normalize = (value: unknown) =>
+  (value === null || value === undefined ? "" : String(value)).toLowerCase().trim().replace(/\s+/g, "")
 const HEADER_ROW_MAPPING = {
   apellido: "inspectorName",
   día: "date",
@@ -39,15 +40,19 @@ const COLUMN_MAPPING = {
   incumplimiento: "nonCompliance",
 }
 
-const normalize = (t: string) => t.toLowerCase().trim().replace(/\s+/g, "")
 const gpsStatus = (m: number) => (m < 0 ? "late" : m >= 2 ? "early" : "on-time")
 
 function parseGps(v: any) {
   if (!v) return 0
-  const s = v.toString().trim()
+  const s = String(v).trim() // Ensure it's a string
   if (/^[+-]?\d+:\d+$/.test(s)) {
-    const [sign, min, sec] = s.match(/^([+-]?)(\d+):(\d+)$/) as RegExpMatchArray
-    return (sign === "-" ? -1 : 1) * (+min + +sec / 60)
+    const match = s.match(/^([+-]?)(\d+):(\d+)$/)
+    if (match) {
+      const sign = match[1] === "-" ? -1 : 1
+      const min = Number.parseInt(match[2], 10) || 0
+      const sec = Number.parseInt(match[3], 10) || 0
+      return sign * (min + sec / 60)
+    }
   }
   if (/^[+-]?\d+$/.test(s)) {
     return +s
@@ -60,7 +65,11 @@ function excelArrayToJson(uint8: Uint8Array) {
   const wb = XLSX.read(uint8, { type: "array" })
   const ws = wb.Sheets[wb.SheetNames[0]]
   const raw = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][]
+
+  console.log("Excel Raw Data:", JSON.stringify(raw, null, 2)) // DEBUG: Log raw data
+
   if (raw.length < 2) throw new Error("Excel must contain header and data rows")
+
   // header rows
   const headerInfo: any = {}
   for (let i = 0; i < Math.min(10, raw.length); i++) {
@@ -70,28 +79,39 @@ function excelArrayToJson(uint8: Uint8Array) {
       const val = r[1]
       const key = HEADER_ROW_MAPPING[normalize(label)] as string | undefined
       if (key) {
-        headerInfo[key] = key === "date" ? new Date(val).toISOString().split("T")[0] : val?.toString().trim()
+        headerInfo[key] = key === "date" ? new Date(val).toISOString().split("T")[0] : String(val || "").trim()
       }
     }
   }
+  console.log("Extracted Header Info:", headerInfo) // DEBUG: Log extracted header info
+
   // find data header
   const dataHeaderRow = raw.findIndex((r) => r.some((c: any) => COLUMN_MAPPING[normalize(String(c || ""))]))
+  console.log("Detected Data Header Row Index:", dataHeaderRow) // DEBUG: Log detected header row index
+
   if (dataHeaderRow === -1) throw new Error("Service-data columns (Línea, Conductor …) not found")
+
   const dataHeaders = raw[dataHeaderRow]
+  console.log("Data Headers Row Content:", dataHeaders) // DEBUG: Log content of the detected header row
+
   const map: Record<number, string> = {}
   dataHeaders.forEach((h: any, i: number) => {
     const k = COLUMN_MAPPING[normalize(String(h || ""))]
     if (k) map[i] = k
   })
+  console.log("Column Mapping (Index to Field Name):", map) // DEBUG: Log the final column mapping
+
   const rows = raw.slice(dataHeaderRow + 1)
+  console.log("Data Rows to Process (after header):", JSON.stringify(rows, null, 2)) // DEBUG: Log data rows
+
   const serviceChecks = rows.flatMap((row, idx) =>
     (() => {
       const obj: any = { ...headerInfo }
       Object.entries(map).forEach(([col, field]) => {
         const val = row[+col]
-        if (val === undefined || val === "") return
+        if (val === undefined || val === null || String(val).trim() === "") return // Also check for empty string after trim
         if (field === "exactHourOfArrival") {
-          obj[field] = typeof val === "number" ? XLSX.SSF.format("hh:mm:ss", val) : val
+          obj[field] = typeof val === "number" ? XLSX.SSF.format("hh:mm:ss", val) : String(val)
         } else if (field === "gpsMinutes") {
           obj[field] = parseGps(val)
         } else if (field === "passengersOnBoard" || field === "passesUsed") {
@@ -99,10 +119,17 @@ function excelArrayToJson(uint8: Uint8Array) {
         } else if (field === "nonCompliance") {
           obj[field] = /^(true|1|yes|sí|si)$/i.test(String(val))
         } else {
-          obj[field] = val.toString().trim()
+          obj[field] = String(val).trim()
         }
       })
-      if (!obj.lineOrRouteNumber && !obj.driverName && !obj.serviceCode) return []
+
+      console.log(`Processed Row ${idx}:`, obj) // DEBUG: Log each processed row object
+
+      // The condition that filters out rows
+      if (!obj.lineOrRouteNumber && !obj.driverName && !obj.serviceCode) {
+        console.log(`Row ${idx} filtered out: Missing key service data.`) // DEBUG: Log why a row is filtered
+        return []
+      }
       return [
         {
           id: `excel-${Date.now()}-${idx}`,
@@ -121,6 +148,7 @@ function excelArrayToJson(uint8: Uint8Array) {
       ]
     })(),
   )
+  console.log("Final Service Checks Count:", serviceChecks.length) // DEBUG: Final count
   return {
     formHeader: {
       title: "DAILY INSPECTION FORM",
@@ -159,52 +187,32 @@ export function ExcelUpload({ onDataLoaded, onClose }: ExcelUploadProps) {
     const reader = new FileReader()
     reader.onload = async (e) => {
       try {
-        const arrayBuffer = e.target?.result as ArrayBuffer // Read as ArrayBuffer
+        const arrayBuffer = e.target?.result as ArrayBuffer
         if (!arrayBuffer) {
           setResult({ success: false, message: "Failed to read file as ArrayBuffer." })
           setIsProcessing(false)
           return
         }
 
-        const uint8Array = new Uint8Array(arrayBuffer) // Convert ArrayBuffer to Uint8Array
+        const uint8Array = new Uint8Array(arrayBuffer)
 
-        // const result = await processExcelFile(uint8Array) // Pass Uint8Array to Server Action
         const parsed = excelArrayToJson(uint8Array)
         setResult({ success: true, message: `Loaded ${parsed.serviceChecks.length} checks` })
         setTimeout(() => {
           onDataLoaded(parsed)
           onClose()
         }, 1000)
-
-        // console.log("Excel processing result:", result)
-        // console.log(
-        //   "Service checks with observations:",
-        //   result.data?.serviceChecks?.map((check) => ({
-        //     id: check.id,
-        //     observations: check.observations,
-        //     hasObservations: !!check.observations && check.observations.trim() !== "",
-        //   })),
-        // )
-
-        // setResult(result)
-
-        // if (result.success && result.data) {
-        //   setTimeout(() => {
-        //     onDataLoaded(result.data)
-        //     onClose()
-        //   }, 1500)
-        // }
       } catch (error) {
         setResult({
           success: false,
           message: "Failed to process the Excel file. Please check the file format.",
         })
-        console.error("Error during Excel file processing:", error) // Use console.error for errors
+        console.error("Error during Excel file processing:", error)
       } finally {
         setIsProcessing(false)
       }
     }
-    reader.readAsArrayBuffer(file) // Read the file as ArrayBuffer
+    reader.readAsArrayBuffer(file)
   }
 
   const handleDrag = (e: React.DragEvent) => {
