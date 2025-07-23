@@ -42,8 +42,8 @@ const COLUMN_MAPPING = {
 
 const gpsStatus = (m: number) => (m < 0 ? "late" : m >= 2 ? "early" : "on-time")
 
-function parseGps(v: any) {
-  if (!v) return 0
+function parseGps(v: any): number {
+  if (v === null || v === undefined || String(v).trim() === "") return 0 // Handle null, undefined, or empty string
   const s = String(v).trim() // Ensure it's a string
   if (/^[+-]?\d+:\d+$/.test(s)) {
     const match = s.match(/^([+-]?)(\d+):(\d+)$/)
