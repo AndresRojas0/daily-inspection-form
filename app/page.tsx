@@ -29,7 +29,7 @@ interface ServiceCheck {
   passesUsed: number
   addressOfStop: string
   observations: string
-  nonCompliance: boolean
+  nonCompliance: boolean // Add this new field
 }
 
 interface DailyInspectionForm {
@@ -73,7 +73,7 @@ export default function DailyInspectionApp() {
       passesUsed: 0,
       addressOfStop: "",
       observations: "",
-      nonCompliance: false,
+      nonCompliance: false, // Add this new field
     }
 
     setForm((prev) => ({
@@ -129,20 +129,20 @@ export default function DailyInspectionApp() {
   }
 
   const handleSubmit = async () => {
-    console.log("Form submission started", form)
+    console.log("Form submission started", form) // Debug log
 
     setIsSubmitting(true)
     setSubmitResult(null)
 
     try {
-      console.log("Calling saveDailyInspectionForm...")
+      console.log("Calling saveDailyInspectionForm...") // Debug log
       const result = await saveDailyInspectionForm(form)
-      console.log("Save result:", result)
+      console.log("Save result:", result) // Debug log
 
       setSubmitResult(result)
 
       if (result.success) {
-        console.log("Form saved successfully, resetting form")
+        console.log("Form saved successfully, resetting form") // Debug log
         // Reset form after successful submission
         setForm({
           formHeader: {
@@ -155,7 +155,7 @@ export default function DailyInspectionApp() {
         })
       }
     } catch (error) {
-      console.error("Error in handleSubmit:", error)
+      console.error("Error in handleSubmit:", error) // Debug log
       setSubmitResult({
         success: false,
         message: "An unexpected error occurred while saving the form",
@@ -176,31 +176,6 @@ export default function DailyInspectionApp() {
       default:
         return "bg-gray-100 text-gray-800"
     }
-  }
-
-  // Helper function to format GPS variance as mm:ss
-  const formatGpsVariance = (minutes: number): string => {
-    const absMinutes = Math.abs(minutes)
-    const wholeMinutes = Math.floor(absMinutes)
-    const seconds = Math.round((absMinutes - wholeMinutes) * 60)
-    const sign = minutes < 0 ? "-" : "+"
-    return `${sign}${wholeMinutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
-  }
-
-  // Helper function to parse GPS variance from mm:ss format
-  const parseGpsVariance = (value: string): number => {
-    if (!value) return 0
-
-    const match = value.match(/^([+-]?)(\d+):(\d+)$/)
-    if (match) {
-      const sign = match[1] === "-" ? -1 : 1
-      const minutes = Number.parseInt(match[2]) || 0
-      const seconds = Number.parseInt(match[3]) || 0
-      return sign * (minutes + seconds / 60)
-    }
-
-    // Fallback to number parsing
-    return Number.parseFloat(value) || 0
   }
 
   const isFormValid =
@@ -418,20 +393,18 @@ export default function DailyInspectionApp() {
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label>GPS Variance (mm:ss)</Label>
+                          <Label>GPS Variance (minutes)</Label>
                           <div className="flex items-center gap-2">
                             <Input
-                              placeholder="+00:00"
-                              value={formatGpsVariance(check.gpsStatus.minutes)}
-                              onChange={(e) => {
-                                const minutes = parseGpsVariance(e.target.value)
-                                updateGpsStatus(check.id, minutes)
-                              }}
+                              type="number"
+                              placeholder="0"
+                              value={check.gpsStatus.minutes}
+                              onChange={(e) => updateGpsStatus(check.id, Number.parseInt(e.target.value) || 0)}
                               className="flex-1"
                             />
                             <Badge className={getStatusColor(check.gpsStatus.status)}>{check.gpsStatus.status}</Badge>
                           </div>
-                          <p className="text-xs text-gray-500">Format: +mm:ss (early) or -mm:ss (late)</p>
+                          <p className="text-xs text-gray-500">Negative = late, 2+ = early, 0-1:59 = on-time</p>
                         </div>
                       </div>
                     </div>
