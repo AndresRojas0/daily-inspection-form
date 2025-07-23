@@ -1,10 +1,7 @@
 import { neon } from "@neondatabase/serverless"
 
 if (!process.env.DATABASE_URL) {
-  console.error("DATABASE_URL environment variable is NOT set.")
   throw new Error("DATABASE_URL environment variable is not set")
-} else {
-  console.log("DATABASE_URL environment variable is set.")
 }
 
 export const sql = neon(process.env.DATABASE_URL)
@@ -18,7 +15,6 @@ export interface DailyInspectionFormDB {
   place_of_work: string
   created_at: string
   updated_at: string
-  service_checks_count?: number // Added for dashboard/calendar views
 }
 
 export interface ServiceCheckDB {

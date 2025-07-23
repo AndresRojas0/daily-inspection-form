@@ -2,54 +2,6 @@
 
 import * as XLSX from "xlsx"
 
-interface ProcessedServiceCheck {
-  id: string
-  lineOrRouteNumber: string
-  driverName: string
-  serviceCode: string
-  fleetCoachNumber: string
-  exactHourOfArrival: string
-  gpsStatus: {
-    minutes: number
-    status: "on-time" | "early" | "late"
-  }
-  passengersOnBoard: number
-  passesUsed: number
-  addressOfStop: string
-  observations: string
-  nonCompliance: boolean
-}
-
-interface ProcessedFormHeader {
-  title: string
-  inspectorName: string
-  date: string
-  placeOfWork: string
-}
-
-interface ProcessedExcelData {
-  formHeader: ProcessedFormHeader
-  serviceChecks: ProcessedServiceCheck[]
-}
-
-interface ExcelRow {
-  inspectorName?: string
-  date?: string
-  placeOfWork?: string
-  direction?: string
-  lineOrRouteNumber?: string
-  driverName?: string
-  serviceCode?: string
-  fleetCoachNumber?: string
-  exactHourOfArrival?: string
-  gpsMinutes?: number
-  passengersOnBoard?: number
-  passesUsed?: number
-  addressOfStop?: string
-  observations?: string
-  nonCompliance?: boolean
-}
-
 // Mapping from Spanish field names to our form fields (case-insensitive)
 const HEADER_ROW_MAPPING = {
   apellido: "inspectorName",
@@ -73,6 +25,7 @@ const COLUMN_MAPPING = {
   observación: "observations", // With accent (singular)
   observaciones: "observations", // With accent (plural)
   observacion: "observations", // Without accent (singular)
+  observaciones: "observations", // Without accent (plural) - duplicate but kept for safety
   notas: "observations", // Alternative word for notes
   comentarios: "observations", // Alternative word for comments
   infracción: "nonCompliance", // Non-compliance with accent
@@ -80,85 +33,88 @@ const COLUMN_MAPPING = {
   incumplimiento: "nonCompliance", // Alternative word
 }
 
-// Helper function to parse GPS variance from various formats
-const parseGpsVariance = (gpsValue: any): number => {
-  if (gpsValue === null || gpsValue === undefined || gpsValue === "") {
-    console.log(`parseGpsVariance: Input is empty/null, returning 0.`)
-    return 0
-  }
-
-  // If it's already a number, use it directly
-  if (typeof gpsValue === "number") {
-    console.log(`parseGpsVariance: Input was already a number, returning ${gpsValue}.`)
-    return gpsValue
-  }
-
-  let gpsString = gpsValue.toString().trim()
-  console.log(`parseGpsVariance: Original input string: "${gpsString}"`)
-
-  // Step 1: Remove outer parentheses if they exist, e.g., "(+02:30)" -> "+02:30"
-  const parenMatch = gpsString.match(/^$$(.*)$$$/) // Corrected regex for literal parentheses
-  if (parenMatch && parenMatch[1]) {
-    gpsString = parenMatch[1]
-    console.log(`parseGpsVariance: After removing outer parentheses: "${gpsString}"`)
-  }
-
-  // Step 2: Try to parse as hh:mm format (from Excel) and convert to minutes.seconds
-  // User wants hh from Excel to be minutes, and mm from Excel to be seconds.
-  const timeMatch = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
-  if (timeMatch) {
-    const sign = timeMatch[1] === "-" ? -1 : 1
-    const hours = Number.parseInt(timeMatch[2], 10) || 0 // This is 'hh' from Excel
-    const minutes = Number.parseInt(timeMatch[3], 10) || 0 // This is 'mm' from Excel
-    const totalMinutes = hours + minutes / 60
-    console.log(
-      `parseGpsVariance: Parsed as hh:mm. Sign: ${sign}, Hours (as minutes): ${hours}, Minutes (as seconds): ${minutes}, Total: ${sign * totalMinutes}`,
-    )
-    return sign * totalMinutes
-  }
-
-  // Step 3: Try to parse as mm format (e.g., "+5", "-3", "10")
-  const minuteMatch = gpsString.match(/^([+-]?)(\d+)$/)
-  if (minuteMatch) {
-    const sign = minuteMatch[1] === "-" ? -1 : 1
-    const minutes = Number.parseInt(minuteMatch[2], 10) || 0
-    console.log(`parseGpsVariance: Parsed as mm. Sign: ${sign}, Minutes: ${minutes}, Total: ${sign * minutes}`)
-    return sign * minutes
-  }
-
-  // Fallback: Try to parse as a regular float (e.g., "2.5", "-1.75")
-  const numValue = Number.parseFloat(gpsString)
-  if (!isNaN(numValue)) {
-    console.log(`parseGpsVariance: Fallback to float parsing, returning ${numValue}.`)
-    return numValue
-  }
-
-  console.warn(`parseGpsVariance: Could not parse "${gpsValue}", returning 0.`)
-  return 0
+interface ExcelRow {
+  inspectorName?: string
+  date?: string
+  placeOfWork?: string
+  direction?: string
+  lineOrRouteNumber?: string
+  driverName?: string
+  serviceCode?: string
+  fleetCoachNumber?: string
+  exactHourOfArrival?: string
+  gpsMinutes?: number
+  passengersOnBoard?: number
+  passesUsed?: number
+  addressOfStop?: string
+  observations?: string
+  nonCompliance?: boolean
 }
 
-// Helper function to determine GPS status
-const calculateGpsStatus = (minutes: number): "on-time" | "early" | "late" => {
+function calculateGpsStatus(minutes: number): "on-time" | "early" | "late" {
   if (minutes < 0) return "late"
   if (minutes >= 2) return "early"
   return "on-time"
 }
 
-// Helper function to detect non-compliance from observations
-const detectNonComplianceFromObservations = (observations: string): boolean => {
+function parseGpsVariance(gpsValue: any): number {
+  if (!gpsValue) return 0
+
+  let gpsString = gpsValue.toString().trim()
+
+  // Remove parentheses if present: (+mm:ss) or (-mm:ss)
+  gpsString = gpsString.replace(/^$$([+-]?\d+:?\d*)$$$/, "$1")
+
+  // Handle different GPS formats
+  // +mm, -mm, +mm:ss, -mm:ss, (+mm:ss), (-mm:ss)
+
+  // Check if it contains a colon (mm:ss format)
+  if (gpsString.includes(":")) {
+    // Updated regex to handle leading zeros: +02:30, -01:45, etc.
+    const match = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
+    if (match) {
+      const sign = match[1] === "-" ? -1 : 1
+      // Parse integers to automatically handle leading zeros
+      const minutes = Number.parseInt(match[2], 10) || 0 // parseInt removes leading zeros
+      const seconds = Number.parseInt(match[3], 10) || 0 // parseInt removes leading zeros
+      // Convert to total minutes (with decimal for seconds)
+      const totalMinutes = minutes + seconds / 60
+      return sign * totalMinutes
+    }
+  } else {
+    // Handle +mm or -mm format (including leading zeros like +05, -03)
+    const match = gpsString.match(/^([+-]?)(\d+)$/)
+    if (match) {
+      const sign = match[1] === "-" ? -1 : 1
+      // Parse integer to automatically handle leading zeros
+      const minutes = Number.parseInt(match[2], 10) || 0 // parseInt removes leading zeros
+      return sign * minutes
+    }
+  }
+
+  // If it's already a number, use it directly
+  if (typeof gpsValue === "number") {
+    return gpsValue
+  }
+
+  // Try to parse as a regular number
+  const numValue = Number.parseFloat(gpsString)
+  return isNaN(numValue) ? 0 : numValue
+}
+
+function detectNonComplianceFromObservations(observations: string): boolean {
   if (!observations) return false
 
   const observationsLower = observations.toLowerCase()
   return observationsLower.includes("informe")
 }
 
-// Helper function to format time from various formats
-const formatTime = (timeValue: any): string => {
+function formatTime(timeValue: any): string {
   if (!timeValue) return ""
 
   // Handle different time formats
   if (typeof timeValue === "string") {
-    // If it's already in HH:MM:SS or HH:MM format
+    // If it's already in HH:MM format
     if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(timeValue)) {
       return timeValue.length === 5 ? `${timeValue}:00` : timeValue
     }
@@ -178,8 +134,7 @@ const formatTime = (timeValue: any): string => {
   return ""
 }
 
-// Helper function to format date from various formats
-const formatDate = (dateValue: any): string => {
+function formatDate(dateValue: any): string {
   if (!dateValue) return ""
 
   // Handle different date formats
@@ -205,15 +160,12 @@ const formatDate = (dateValue: any): string => {
   return ""
 }
 
-// Helper function to normalize text
-const normalizeText = (text: string): string => {
+function normalizeText(text: string): string {
   return text.toLowerCase().trim().replace(/\s+/g, "")
 }
 
-// Helper function to find header information from rows
-const findHeaderInfo = (rawData: any[][]): { [key: string]: any } => {
+function findHeaderInfo(rawData: any[][]): { [key: string]: any } {
   const headerInfo: { [key: string]: any } = {}
-  console.log("findHeaderInfo: Starting search for header information.")
 
   // Look through the first several rows to find header information
   for (let i = 0; i < Math.min(10, rawData.length); i++) {
@@ -227,7 +179,6 @@ const findHeaderInfo = (rawData: any[][]): { [key: string]: any } => {
         const mappedField = HEADER_ROW_MAPPING[normalizedLabel as keyof typeof HEADER_ROW_MAPPING]
 
         if (mappedField) {
-          console.log(`findHeaderInfo: Found potential header "${label}" -> "${mappedField}" with value "${value}"`)
           switch (mappedField) {
             case "date":
               headerInfo[mappedField] = formatDate(value)
@@ -239,42 +190,35 @@ const findHeaderInfo = (rawData: any[][]): { [key: string]: any } => {
       }
     }
   }
-  console.log("findHeaderInfo: Extracted header info:", headerInfo)
+
   return headerInfo
 }
 
-// Helper function to find where the service data starts
-const findDataStartRow = (rawData: any[][]): number => {
-  console.log("findDataStartRow: Starting search for data start row.")
+function findDataStartRow(rawData: any[][]): number {
   // Look for a row that contains column headers for service data
   for (let i = 0; i < rawData.length; i++) {
     const row = rawData[i]
     if (row && row.length > 5) {
       // Check if this row contains service check column headers
       let matchCount = 0
-      const matchedHeaders = []
       for (const cell of row) {
         if (cell) {
           const normalizedCell = normalizeText(cell.toString())
           if (COLUMN_MAPPING[normalizedCell as keyof typeof COLUMN_MAPPING]) {
             matchCount++
-            matchedHeaders.push(cell.toString())
           }
         }
       }
       // If we find at least 3 matching column headers, this is likely the header row
       if (matchCount >= 3) {
-        console.log(`findDataStartRow: Found data header row at index ${i} with matches:`, matchedHeaders)
         return i
       }
     }
   }
-  console.log("findDataStartRow: No data header row found.")
   return -1
 }
 
 export async function processExcelFile(fileBuffer: ArrayBuffer) {
-  console.log("processExcelFile: Starting Excel file processing.")
   try {
     // Parse the Excel file
     const workbook = XLSX.read(fileBuffer, { type: "array" })
@@ -283,10 +227,8 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
 
     // Convert to JSON with header row
     const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]
-    console.log("processExcelFile: Raw data from Excel:", rawData.slice(0, 15)) // Log first 15 rows for brevity
 
     if (rawData.length < 2) {
-      console.error("processExcelFile: Excel file too short.")
       return {
         success: false,
         message: "Excel file must contain header information and service data",
@@ -300,7 +242,6 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
     const dataStartRow = findDataStartRow(rawData)
 
     if (dataStartRow === -1) {
-      console.error("processExcelFile: Could not find service data start row.")
       return {
         success: false,
         message:
@@ -310,13 +251,6 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
 
     const columnHeaders = rawData[dataStartRow] as string[]
     const dataRows = rawData.slice(dataStartRow + 1)
-    console.log("processExcelFile: Column headers identified:", columnHeaders)
-    console.log(
-      "processExcelFile: Data rows starting from index:",
-      dataStartRow + 1,
-      "Total data rows:",
-      dataRows.length,
-    )
 
     // Map column headers to our field names (case-insensitive)
     const headerMapping: { [key: number]: string } = {}
@@ -326,11 +260,9 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
         const mappedField = COLUMN_MAPPING[normalizedHeader as keyof typeof COLUMN_MAPPING]
         if (mappedField) {
           headerMapping[index] = mappedField
-          console.log(`processExcelFile: Mapped column "${header}" (index ${index}) to field "${mappedField}"`)
         }
       }
     })
-    console.log("processExcelFile: Final header mapping:", headerMapping)
 
     // Process each data row
     const processedRows: ExcelRow[] = []
@@ -376,20 +308,15 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
       // Only add rows that have some service data
       if (processedRow.lineOrRouteNumber || processedRow.driverName || processedRow.serviceCode) {
         processedRows.push(processedRow)
-      } else {
-        console.log("processExcelFile: Skipping row due to missing key service data:", row)
       }
     }
 
     if (processedRows.length === 0) {
-      console.error("processExcelFile: No valid service data rows found after processing.")
       return {
         success: false,
         message: "No valid service data rows found in the Excel file",
       }
     }
-    console.log("processExcelFile: Successfully processed rows count:", processedRows.length)
-    console.log("processExcelFile: Sample processed row:", processedRows[0])
 
     // Create form header from the extracted header information
     const formHeader = {
@@ -398,7 +325,6 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
       date: headerInfo.date || new Date().toISOString().split("T")[0],
       placeOfWork: headerInfo.placeOfWork || "",
     }
-    console.log("processExcelFile: Final form header:", formHeader)
 
     // Process service checks
     const serviceChecks = processedRows.map((row, index) => {
@@ -427,8 +353,6 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
         nonCompliance: autoDetectedNonCompliance || explicitNonCompliance, // Auto-detect or explicit
       }
     })
-    console.log("processExcelFile: Final service checks count:", serviceChecks.length)
-    console.log("processExcelFile: Sample final service check:", serviceChecks[0])
 
     return {
       success: true,
