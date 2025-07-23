@@ -379,5 +379,6 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
       success: false,
       message: `Error processing Excel file: ${error instanceof Error ? error.message : "Unknown error"}`,
     }
+    console.log("Error en async: ",error)
   }
 }
