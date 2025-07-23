@@ -97,21 +97,19 @@ const parseGpsVariance = (gpsValue: any): number => {
   console.log(`parseGpsVariance: Original input string: "${gpsString}"`)
 
   // Step 1: Remove outer parentheses if they exist, e.g., "(+02:30)" -> "+02:30"
-  // Corrected regex: use escaped parentheses $$ and $$
-  const parenMatch = gpsString.match(/^$$(.*)$$$/)
+  const parenMatch = gpsString.match(/^$$(.*)$$$/) // Corrected regex for literal parentheses
   if (parenMatch && parenMatch[1]) {
     gpsString = parenMatch[1]
     console.log(`parseGpsVariance: After removing outer parentheses: "${gpsString}"`)
   }
 
   // Step 2: Try to parse as hh:mm format (from Excel) and convert to minutes.seconds
+  // User wants hh from Excel to be minutes, and mm from Excel to be seconds.
   const timeMatch = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
   if (timeMatch) {
     const sign = timeMatch[1] === "-" ? -1 : 1
     const hours = Number.parseInt(timeMatch[2], 10) || 0 // This is 'hh' from Excel
     const minutes = Number.parseInt(timeMatch[3], 10) || 0 // This is 'mm' from Excel
-    // User wants hh from Excel to be minutes, and mm from Excel to be seconds.
-    // So, total minutes = hours (from Excel) + minutes (from Excel) / 60
     const totalMinutes = hours + minutes / 60
     console.log(
       `parseGpsVariance: Parsed as hh:mm. Sign: ${sign}, Hours (as minutes): ${hours}, Minutes (as seconds): ${minutes}, Total: ${sign * totalMinutes}`,
@@ -215,6 +213,7 @@ const normalizeText = (text: string): string => {
 // Helper function to find header information from rows
 const findHeaderInfo = (rawData: any[][]): { [key: string]: any } => {
   const headerInfo: { [key: string]: any } = {}
+  console.log("findHeaderInfo: Starting search for header information.")
 
   // Look through the first several rows to find header information
   for (let i = 0; i < Math.min(10, rawData.length); i++) {
@@ -228,6 +227,7 @@ const findHeaderInfo = (rawData: any[][]): { [key: string]: any } => {
         const mappedField = HEADER_ROW_MAPPING[normalizedLabel as keyof typeof HEADER_ROW_MAPPING]
 
         if (mappedField) {
+          console.log(`findHeaderInfo: Found potential header "${label}" -> "${mappedField}" with value "${value}"`)
           switch (mappedField) {
             case "date":
               headerInfo[mappedField] = formatDate(value)
@@ -239,36 +239,42 @@ const findHeaderInfo = (rawData: any[][]): { [key: string]: any } => {
       }
     }
   }
-
+  console.log("findHeaderInfo: Extracted header info:", headerInfo)
   return headerInfo
 }
 
 // Helper function to find where the service data starts
 const findDataStartRow = (rawData: any[][]): number => {
+  console.log("findDataStartRow: Starting search for data start row.")
   // Look for a row that contains column headers for service data
   for (let i = 0; i < rawData.length; i++) {
     const row = rawData[i]
     if (row && row.length > 5) {
       // Check if this row contains service check column headers
       let matchCount = 0
+      const matchedHeaders = []
       for (const cell of row) {
         if (cell) {
           const normalizedCell = normalizeText(cell.toString())
           if (COLUMN_MAPPING[normalizedCell as keyof typeof COLUMN_MAPPING]) {
             matchCount++
+            matchedHeaders.push(cell.toString())
           }
         }
       }
       // If we find at least 3 matching column headers, this is likely the header row
       if (matchCount >= 3) {
+        console.log(`findDataStartRow: Found data header row at index ${i} with matches:`, matchedHeaders)
         return i
       }
     }
   }
+  console.log("findDataStartRow: No data header row found.")
   return -1
 }
 
 export async function processExcelFile(fileBuffer: ArrayBuffer) {
+  console.log("processExcelFile: Starting Excel file processing.")
   try {
     // Parse the Excel file
     const workbook = XLSX.read(fileBuffer, { type: "array" })
@@ -277,8 +283,10 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
 
     // Convert to JSON with header row
     const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]
+    console.log("processExcelFile: Raw data from Excel:", rawData.slice(0, 15)) // Log first 15 rows for brevity
 
     if (rawData.length < 2) {
+      console.error("processExcelFile: Excel file too short.")
       return {
         success: false,
         message: "Excel file must contain header information and service data",
@@ -292,6 +300,7 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
     const dataStartRow = findDataStartRow(rawData)
 
     if (dataStartRow === -1) {
+      console.error("processExcelFile: Could not find service data start row.")
       return {
         success: false,
         message:
@@ -301,6 +310,13 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
 
     const columnHeaders = rawData[dataStartRow] as string[]
     const dataRows = rawData.slice(dataStartRow + 1)
+    console.log("processExcelFile: Column headers identified:", columnHeaders)
+    console.log(
+      "processExcelFile: Data rows starting from index:",
+      dataStartRow + 1,
+      "Total data rows:",
+      dataRows.length,
+    )
 
     // Map column headers to our field names (case-insensitive)
     const headerMapping: { [key: number]: string } = {}
@@ -310,9 +326,11 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
         const mappedField = COLUMN_MAPPING[normalizedHeader as keyof typeof COLUMN_MAPPING]
         if (mappedField) {
           headerMapping[index] = mappedField
+          console.log(`processExcelFile: Mapped column "${header}" (index ${index}) to field "${mappedField}"`)
         }
       }
     })
+    console.log("processExcelFile: Final header mapping:", headerMapping)
 
     // Process each data row
     const processedRows: ExcelRow[] = []
@@ -358,15 +376,20 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
       // Only add rows that have some service data
       if (processedRow.lineOrRouteNumber || processedRow.driverName || processedRow.serviceCode) {
         processedRows.push(processedRow)
+      } else {
+        console.log("processExcelFile: Skipping row due to missing key service data:", row)
       }
     }
 
     if (processedRows.length === 0) {
+      console.error("processExcelFile: No valid service data rows found after processing.")
       return {
         success: false,
         message: "No valid service data rows found in the Excel file",
       }
     }
+    console.log("processExcelFile: Successfully processed rows count:", processedRows.length)
+    console.log("processExcelFile: Sample processed row:", processedRows[0])
 
     // Create form header from the extracted header information
     const formHeader = {
@@ -375,6 +398,7 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
       date: headerInfo.date || new Date().toISOString().split("T")[0],
       placeOfWork: headerInfo.placeOfWork || "",
     }
+    console.log("processExcelFile: Final form header:", formHeader)
 
     // Process service checks
     const serviceChecks = processedRows.map((row, index) => {
@@ -403,6 +427,8 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
         nonCompliance: autoDetectedNonCompliance || explicitNonCompliance, // Auto-detect or explicit
       }
     })
+    console.log("processExcelFile: Final service checks count:", serviceChecks.length)
+    console.log("processExcelFile: Sample final service check:", serviceChecks[0])
 
     return {
       success: true,

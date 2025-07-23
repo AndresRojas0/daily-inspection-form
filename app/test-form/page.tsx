@@ -223,7 +223,7 @@ export default function DailyInspectionApp() {
     let gpsString = value.trim()
 
     // Remove parentheses if present, e.g., "(+02:30)" -> "+02:30"
-    const parenMatch = gpsString.match(/^$$(.*)$$$/)
+    const parenMatch = gpsString.match(/^$$(.*)$$$/) // Corrected regex
     if (parenMatch && parenMatch[1]) {
       gpsString = parenMatch[1]
     }
