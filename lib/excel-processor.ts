@@ -48,13 +48,65 @@ interface ExcelRow {
   passesUsed?: number
   addressOfStop?: string
   observations?: string
-  nonCompliance?: boolean // Add this field
+  nonCompliance?: boolean
 }
 
 function calculateGpsStatus(minutes: number): "on-time" | "early" | "late" {
   if (minutes < 0) return "late"
   if (minutes >= 2) return "early"
   return "on-time"
+}
+
+function parseGpsVariance(gpsValue: any): number {
+  if (!gpsValue) return 0
+
+  let gpsString = gpsValue.toString().trim()
+
+  // Remove parentheses if present: (+mm:ss) or (-mm:ss)
+  gpsString = gpsString.replace(/^$$([+-]?\d+:?\d*)$$$/, "$1")
+
+  // Handle different GPS formats
+  // +mm, -mm, +mm:ss, -mm:ss, (+mm:ss), (-mm:ss)
+
+  // Check if it contains a colon (mm:ss format)
+  if (gpsString.includes(":")) {
+    // Updated regex to handle leading zeros: +02:30, -01:45, etc.
+    const match = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
+    if (match) {
+      const sign = match[1] === "-" ? -1 : 1
+      // Parse integers to automatically handle leading zeros
+      const minutes = Number.parseInt(match[2], 10) || 0 // parseInt removes leading zeros
+      const seconds = Number.parseInt(match[3], 10) || 0 // parseInt removes leading zeros
+      // Convert to total minutes (with decimal for seconds)
+      const totalMinutes = minutes + seconds / 60
+      return sign * totalMinutes
+    }
+  } else {
+    // Handle +mm or -mm format (including leading zeros like +05, -03)
+    const match = gpsString.match(/^([+-]?)(\d+)$/)
+    if (match) {
+      const sign = match[1] === "-" ? -1 : 1
+      // Parse integer to automatically handle leading zeros
+      const minutes = Number.parseInt(match[2], 10) || 0 // parseInt removes leading zeros
+      return sign * minutes
+    }
+  }
+
+  // If it's already a number, use it directly
+  if (typeof gpsValue === "number") {
+    return gpsValue
+  }
+
+  // Try to parse as a regular number
+  const numValue = Number.parseFloat(gpsString)
+  return isNaN(numValue) ? 0 : numValue
+}
+
+function detectNonComplianceFromObservations(observations: string): boolean {
+  if (!observations) return false
+
+  const observationsLower = observations.toLowerCase()
+  return observationsLower.includes("informe")
 }
 
 function formatTime(timeValue: any): string {
@@ -229,6 +281,9 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
               processedRow[fieldName] = formatTime(cellValue)
               break
             case "gpsMinutes":
+              // Use the new GPS parsing function
+              processedRow[fieldName] = parseGpsVariance(cellValue)
+              break
             case "passengersOnBoard":
             case "passesUsed":
               processedRow[fieldName] =
@@ -272,24 +327,32 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
     }
 
     // Process service checks
-    const serviceChecks = processedRows.map((row, index) => ({
-      id: `excel-${Date.now()}-${index}`,
-      lineOrRouteNumber: row.lineOrRouteNumber || "",
-      driverName: row.driverName || "",
-      serviceCode: row.serviceCode || "",
-      fleetCoachNumber: row.fleetCoachNumber || "",
-      exactHourOfArrival: row.exactHourOfArrival || "",
-      gpsStatus: {
-        minutes: row.gpsMinutes || 0,
-        status: calculateGpsStatus(row.gpsMinutes || 0),
-      },
-      passengersOnBoard: row.passengersOnBoard || 0,
-      passesUsed: row.passesUsed || 0,
-      addressOfStop: row.addressOfStop || "",
-      observations:
-        [row.observations || "", row.direction || ""].filter((text) => text && text.trim() !== "").join(" - ") || "",
-      nonCompliance: row.nonCompliance || false, // Add this field
-    }))
+    const serviceChecks = processedRows.map((row, index) => {
+      const observations =
+        [row.observations || "", row.direction || ""].filter((text) => text && text.trim() !== "").join(" - ") || ""
+
+      // Auto-detect non-compliance from observations
+      const autoDetectedNonCompliance = detectNonComplianceFromObservations(observations)
+      const explicitNonCompliance = row.nonCompliance || false
+
+      return {
+        id: `excel-${Date.now()}-${index}`,
+        lineOrRouteNumber: row.lineOrRouteNumber || "",
+        driverName: row.driverName || "",
+        serviceCode: row.serviceCode || "",
+        fleetCoachNumber: row.fleetCoachNumber || "",
+        exactHourOfArrival: row.exactHourOfArrival || "",
+        gpsStatus: {
+          minutes: row.gpsMinutes || 0,
+          status: calculateGpsStatus(row.gpsMinutes || 0),
+        },
+        passengersOnBoard: row.passengersOnBoard || 0,
+        passesUsed: row.passesUsed || 0,
+        addressOfStop: row.addressOfStop || "",
+        observations: observations,
+        nonCompliance: autoDetectedNonCompliance || explicitNonCompliance, // Auto-detect or explicit
+      }
+    })
 
     return {
       success: true,
@@ -303,8 +366,11 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
         dataStartRow,
         columnHeaders,
         processedRowsCount: processedRows.length,
-        sampleProcessedRow: processedRows[0], // Add sample row for debugging
-        sampleServiceCheck: serviceChecks[0], // Add sample service check for debugging
+        sampleProcessedRow: processedRows[0],
+        sampleServiceCheck: serviceChecks[0],
+        autoDetectedNonCompliance: serviceChecks.filter((check) =>
+          detectNonComplianceFromObservations(check.observations),
+        ).length,
       },
     }
   } catch (error) {

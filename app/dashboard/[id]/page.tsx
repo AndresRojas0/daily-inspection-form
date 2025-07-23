@@ -41,6 +41,15 @@ export default async function FormDetailPage({ params }: PageProps) {
     }
   }
 
+  // Helper function to format GPS variance as mm:ss
+  const formatGpsVariance = (minutes: number): string => {
+    const absMinutes = Math.abs(minutes)
+    const wholeMinutes = Math.floor(absMinutes)
+    const seconds = Math.round((absMinutes - wholeMinutes) * 60)
+    const sign = minutes < 0 ? "-" : "+"
+    return `${sign}${wholeMinutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="mx-auto max-w-4xl space-y-6">
@@ -170,7 +179,7 @@ export default async function FormDetailPage({ params }: PageProps) {
                       </div>
                       <div>
                         <p className="text-sm text-gray-500">GPS Variance</p>
-                        <p className="font-medium">{check.gps_minutes} minutes</p>
+                        <p className="font-medium">{formatGpsVariance(check.gps_minutes)}</p>
                       </div>
                       <div>
                         <p className="text-sm text-gray-500">Passengers on Board</p>
