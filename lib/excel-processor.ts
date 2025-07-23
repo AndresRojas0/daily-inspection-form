@@ -1,7 +1,6 @@
 "use server"
 
 import * as XLSX from "xlsx"
-import { Buffer } from "buffer" // Import Node.js Buffer
 
 // Mapping from Spanish field names to our form fields (case-insensitive)
 const HEADER_ROW_MAPPING = {
@@ -219,13 +218,10 @@ function findDataStartRow(rawData: any[][]): number {
   return -1
 }
 
-export async function processExcelFile(fileBase64: string) {
+export async function processExcelFile(fileUint8Array: Uint8Array) {
   try {
-    // Convert Base64 string back to a Buffer
-    const fileBuffer = Buffer.from(fileBase64, "base64")
-
-    // Parse the Excel file
-    const workbook = XLSX.read(fileBuffer, { type: "buffer" }) // Use type "buffer"
+    // Parse the Excel file directly from Uint8Array
+    const workbook = XLSX.read(fileUint8Array, { type: "array" }) // Use type "array" for Uint8Array
     const sheetName = workbook.SheetNames[0]
     const worksheet = workbook.Sheets[sheetName]
 
@@ -383,6 +379,5 @@ export async function processExcelFile(fileBase64: string) {
       success: false,
       message: `Error processing Excel file: ${error instanceof Error ? error.message : "Unknown error"}`,
     }
-    console.log("Error en async: ", error)
   }
 }
