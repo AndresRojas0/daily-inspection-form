@@ -66,7 +66,7 @@ function excelArrayToJson(uint8: Uint8Array) {
   const ws = wb.Sheets[wb.SheetNames[0]]
   const raw = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][]
 
-  console.log("Excel Raw Data:", JSON.stringify(raw, null, 2)) // DEBUG: Log raw data
+  console.log("DEBUG: Excel Raw Data (first 15 rows):", JSON.stringify(raw.slice(0, 15), null, 2)) // DEBUG: Log raw data
 
   if (raw.length < 2) throw new Error("Excel must contain header and data rows")
 
@@ -83,51 +83,73 @@ function excelArrayToJson(uint8: Uint8Array) {
       }
     }
   }
-  console.log("Extracted Header Info:", headerInfo) // DEBUG: Log extracted header info
+  console.log("DEBUG: Extracted Header Info:", headerInfo) // DEBUG: Log extracted header info
 
   // find data header
-  const dataHeaderRow = raw.findIndex((r) => r.some((c: any) => COLUMN_MAPPING[normalize(String(c || ""))]))
-  console.log("Detected Data Header Row Index:", dataHeaderRow) // DEBUG: Log detected header row index
+  const dataHeaderRowIndex = raw.findIndex((r) => r.some((c: any) => COLUMN_MAPPING[normalize(String(c || ""))]))
+  console.log("DEBUG: Detected Data Header Row Index:", dataHeaderRowIndex) // DEBUG: Log detected header row index
 
-  if (dataHeaderRow === -1) throw new Error("Service-data columns (Línea, Conductor …) not found")
+  if (dataHeaderRowIndex === -1) throw new Error("Service-data columns (Línea, Conductor …) not found")
 
-  const dataHeaders = raw[dataHeaderRow]
-  console.log("Data Headers Row Content:", dataHeaders) // DEBUG: Log content of the detected header row
+  const dataHeaders = raw[dataHeaderRowIndex]
+  console.log("DEBUG: Data Headers Row Content:", dataHeaders) // DEBUG: Log content of the detected header row
 
   const map: Record<number, string> = {}
   dataHeaders.forEach((h: any, i: number) => {
     const k = COLUMN_MAPPING[normalize(String(h || ""))]
-    if (k) map[i] = k
+    if (k) {
+      map[i] = k
+      console.log(`DEBUG: Mapped column index ${i} ('${h}') to field '${k}'`) // DEBUG: Log successful mappings
+    } else {
+      console.log(`DEBUG: Column index ${i} ('${h}') did not match any known field.`) // DEBUG: Log unmatched columns
+    }
   })
-  console.log("Column Mapping (Index to Field Name):", map) // DEBUG: Log the final column mapping
+  console.log("DEBUG: Final Column Mapping (Index to Field Name):", map) // DEBUG: Log the final column mapping
 
-  const rows = raw.slice(dataHeaderRow + 1)
-  console.log("Data Rows to Process (after header):", JSON.stringify(rows, null, 2)) // DEBUG: Log data rows
+  const rows = raw.slice(dataHeaderRowIndex + 1)
+  console.log("DEBUG: Number of Data Rows to Process:", rows.length) // DEBUG: Log data rows count
+  console.log("DEBUG: First 5 Data Rows to Process:", JSON.stringify(rows.slice(0, 5), null, 2)) // DEBUG: Log first few data rows
 
   const serviceChecks = rows.flatMap((row, idx) =>
     (() => {
       const obj: any = { ...headerInfo }
-      Object.entries(map).forEach(([col, field]) => {
-        const val = row[+col]
-        if (val === undefined || val === null || String(val).trim() === "") return // Also check for empty string after trim
-        if (field === "exactHourOfArrival") {
-          obj[field] = typeof val === "number" ? XLSX.SSF.format("hh:mm:ss", val) : String(val)
-        } else if (field === "gpsMinutes") {
-          obj[field] = parseGps(val)
-        } else if (field === "passengersOnBoard" || field === "passesUsed") {
-          obj[field] = +val || 0
-        } else if (field === "nonCompliance") {
-          obj[field] = /^(true|1|yes|sí|si)$/i.test(String(val))
+      let rowHasKeyData = false // Flag to check if this row has any of the key service data fields
+
+      Object.entries(map).forEach(([colIndex, fieldName]) => {
+        const val = row[Number.parseInt(colIndex)]
+        const trimmedVal = String(val || "").trim() // Ensure val is string and trim
+
+        console.log(
+          `DEBUG: Row ${idx}, Col ${colIndex} (Field: ${fieldName}): Raw Value='${val}', Trimmed='${trimmedVal}'`,
+        ) // DEBUG: Log each cell value
+
+        if (trimmedVal === "") return // Skip if empty after trim
+
+        if (fieldName === "exactHourOfArrival") {
+          obj[fieldName] = typeof val === "number" ? XLSX.SSF.format("hh:mm:ss", val) : trimmedVal
+        } else if (fieldName === "gpsMinutes") {
+          obj[fieldName] = parseGps(val)
+        } else if (fieldName === "passengersOnBoard" || fieldName === "passesUsed") {
+          obj[fieldName] = +trimmedVal || 0
+        } else if (fieldName === "nonCompliance") {
+          obj[fieldName] = /^(true|1|yes|sí|si)$/i.test(trimmedVal)
         } else {
-          obj[field] = String(val).trim()
+          obj[fieldName] = trimmedVal
+        }
+
+        // Check if any of the key fields are populated
+        if (["lineOrRouteNumber", "driverName", "serviceCode"].includes(fieldName) && obj[fieldName]) {
+          rowHasKeyData = true
         }
       })
 
-      console.log(`Processed Row ${idx}:`, obj) // DEBUG: Log each processed row object
+      console.log(`DEBUG: Processed Row ${idx} Object:`, obj) // DEBUG: Log each processed row object
 
       // The condition that filters out rows
-      if (!obj.lineOrRouteNumber && !obj.driverName && !obj.serviceCode) {
-        console.log(`Row ${idx} filtered out: Missing key service data.`) // DEBUG: Log why a row is filtered
+      if (!rowHasKeyData) {
+        console.log(
+          `DEBUG: Row ${idx} filtered out: Missing key service data (lineOrRouteNumber, driverName, or serviceCode).`,
+        ) // DEBUG: Log why a row is filtered
         return []
       }
       return [
@@ -148,7 +170,7 @@ function excelArrayToJson(uint8: Uint8Array) {
       ]
     })(),
   )
-  console.log("Final Service Checks Count:", serviceChecks.length) // DEBUG: Final count
+  console.log("DEBUG: Final Service Checks Count:", serviceChecks.length) // DEBUG: Final count
   return {
     formHeader: {
       title: "DAILY INSPECTION FORM",
