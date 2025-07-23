@@ -50,6 +50,18 @@ export default async function FormDetailPage({ params }: PageProps) {
     return `${sign}${wholeMinutes.toString().padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`
   }
 
+  // Options for UTC-3 timezone display
+  const dateTimeOptions: Intl.DateTimeFormatOptions = {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    timeZone: "America/Argentina/Buenos_Aires", // UTC-3 timezone
+    hour12: false, // Use 24-hour format
+  }
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="mx-auto max-w-4xl space-y-6">
@@ -77,8 +89,7 @@ export default async function FormDetailPage({ params }: PageProps) {
               {form.title}
             </CardTitle>
             <CardDescription>
-              Created on {new Date(form.created_at).toLocaleDateString()} at{" "}
-              {new Date(form.created_at).toLocaleTimeString()}
+              Created on {new Date(form.created_at).toLocaleString("en-US", dateTimeOptions)}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -94,7 +105,9 @@ export default async function FormDetailPage({ params }: PageProps) {
                 <Calendar className="w-4 h-4 text-gray-500" />
                 <div>
                   <p className="text-sm text-gray-500">Date</p>
-                  <p className="font-medium">{new Date(form.date).toLocaleDateString()}</p>
+                  <p className="font-medium">
+                    {new Date(form.date).toLocaleDateString("en-US", { timeZone: "America/Argentina/Buenos_Aires" })}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

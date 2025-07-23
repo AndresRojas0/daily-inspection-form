@@ -205,10 +205,11 @@ export async function getDailyInspectionFormById(id: number) {
       }
     }
 
+    // Order service checks by exact_hour_of_arrival
     const serviceChecks = (await sql`
       SELECT * FROM service_checks 
       WHERE form_id = ${id} 
-      ORDER BY created_at ASC
+      ORDER BY exact_hour_of_arrival ASC
     `) as ServiceCheckDB[]
 
     const formWithChecks: DailyInspectionFormWithChecks = {
