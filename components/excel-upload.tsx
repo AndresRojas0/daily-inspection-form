@@ -20,7 +20,7 @@ export function ExcelUpload({ onDataLoaded, onClose }: ExcelUploadProps) {
   const [dragActive, setDragActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFile = async (file: File) => {
+  const handleFile = (file: File) => {
     if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
       setResult({
         success: false,
@@ -32,38 +32,49 @@ export function ExcelUpload({ onDataLoaded, onClose }: ExcelUploadProps) {
     setIsProcessing(true)
     setResult(null)
 
-    try {
-      const arrayBuffer = await file.arrayBuffer()
-      const result = await processExcelFile(arrayBuffer)
+    const reader = new FileReader()
+    reader.onload = async (e) => {
+      try {
+        const base64String = e.target?.result?.toString().split(",")[1] // Get the Base64 part of the Data URL
 
-      console.log("Excel processing result:", result) // Add this debug log
-      console.log(
-        "Service checks with observations:",
-        result.data?.serviceChecks?.map((check) => ({
-          id: check.id,
-          observations: check.observations,
-          hasObservations: !!check.observations && check.observations.trim() !== "",
-        })),
-      ) // Add this debug log
+        if (!base64String) {
+          setResult({ success: false, message: "Failed to read file as Base64." })
+          setIsProcessing(false)
+          return
+        }
 
-      setResult(result)
+        const result = await processExcelFile(base64String) // Pass Base64 string to Server Action
 
-      if (result.success && result.data) {
-        // Wait a moment to show success message, then load data
-        setTimeout(() => {
-          onDataLoaded(result.data)
-          onClose()
-        }, 1500)
+        console.log("Excel processing result:", result) // Add this debug log
+        console.log(
+          "Service checks with observations:",
+          result.data?.serviceChecks?.map((check) => ({
+            id: check.id,
+            observations: check.observations,
+            hasObservations: !!check.observations && check.observations.trim() !== "",
+          })),
+        ) // Add this debug log
+
+        setResult(result)
+
+        if (result.success && result.data) {
+          // Wait a moment to show success message, then load data
+          setTimeout(() => {
+            onDataLoaded(result.data)
+            onClose()
+          }, 1500)
+        }
+      } catch (error) {
+        setResult({
+          success: false,
+          message: "Failed to process the Excel file. Please check the file format.",
+        })
+        console.log("Error with Excel", error)
+      } finally {
+        setIsProcessing(false)
       }
-    } catch (error) {
-      setResult({
-        success: false,
-        message: "Failed to process the Excel file. Please check the file format.",
-      })
-      console.log("Error with Excel",error)
-    } finally {
-      setIsProcessing(false)
     }
+    reader.readAsDataURL(file) // Read the file as a Data URL
   }
 
   const handleDrag = (e: React.DragEvent) => {

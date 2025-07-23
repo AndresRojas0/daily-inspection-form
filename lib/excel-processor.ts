@@ -1,6 +1,7 @@
 "use server"
 
 import * as XLSX from "xlsx"
+import { Buffer } from "buffer" // Import Node.js Buffer
 
 // Mapping from Spanish field names to our form fields (case-insensitive)
 const HEADER_ROW_MAPPING = {
@@ -63,7 +64,7 @@ function parseGpsVariance(gpsValue: any): number {
   let gpsString = gpsValue.toString().trim()
 
   // Remove parentheses if present: (+mm:ss) or (-mm:ss)
-  gpsString = gpsString.replace(/^$$([+-]?\d+:?\d*)$$$/, "$1")
+  gpsString = gpsString.replace(/^$$(.+)$$$/, "$1")
 
   // Handle different GPS formats
   // +mm, -mm, +mm:ss, -mm:ss, (+mm:ss), (-mm:ss)
@@ -218,10 +219,13 @@ function findDataStartRow(rawData: any[][]): number {
   return -1
 }
 
-export async function processExcelFile(fileBuffer: ArrayBuffer) {
+export async function processExcelFile(fileBase64: string) {
   try {
+    // Convert Base64 string back to a Buffer
+    const fileBuffer = Buffer.from(fileBase64, "base64")
+
     // Parse the Excel file
-    const workbook = XLSX.read(fileBuffer, { type: "array" })
+    const workbook = XLSX.read(fileBuffer, { type: "buffer" }) // Use type "buffer"
     const sheetName = workbook.SheetNames[0]
     const worksheet = workbook.Sheets[sheetName]
 
@@ -379,6 +383,6 @@ export async function processExcelFile(fileBuffer: ArrayBuffer) {
       success: false,
       message: `Error processing Excel file: ${error instanceof Error ? error.message : "Unknown error"}`,
     }
-    console.log("Error en async: ",error)
+    console.log("Error en async: ", error)
   }
 }
