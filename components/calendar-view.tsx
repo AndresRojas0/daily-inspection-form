@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react" // Import useEffect
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -51,12 +51,16 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteResult, setDeleteResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  console.log("Calendar received forms:", forms) // Debug log
+  useEffect(() => {
+    console.log("Calendar View: Initial forms received:", forms.length, forms)
+  }, [forms]) // Log initial forms and their count
 
   // Group forms by date
+  // Ensure the date string is consistently 'YYYY-MM-DD' for grouping and comparison
   const formsByDate = forms.reduce(
     (acc, form) => {
-      const date = form.date
+      // Create a Date object from the form.date to normalize it to UTC and then get YYYY-MM-DD
+      const date = new Date(form.date).toISOString().split("T")[0]
       if (!acc[date]) {
         acc[date] = []
       }
@@ -65,6 +69,14 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
     },
     {} as Record<string, CalendarForm[]>,
   )
+
+  useEffect(() => {
+    if (selectedDate) {
+      console.log("Calendar View: Selected date changed to:", selectedDate)
+      console.log("Calendar View: Forms grouped by date object:", formsByDate) // Log the full formsByDate object
+      console.log("Calendar View: Forms for selected date from formsByDate:", formsByDate[selectedDate] || [])
+    }
+  }, [selectedDate, formsByDate]) // Include formsByDate in dependencies
 
   const handleDeleteClick = (form: CalendarForm) => {
     setFormToDelete(form)
@@ -78,8 +90,9 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
     setDeleteResult(null)
 
     try {
+      // Call the server action to delete the form
       const result = await deleteDailyInspectionForm(formToDelete.id)
-      setDeleteResult(result)
+      setDeleteResult(result) // Set result from server action
 
       if (result.success) {
         // Remove the deleted form from the local state
@@ -89,20 +102,20 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
         setTimeout(() => {
           setDeleteDialogOpen(false)
           setFormToDelete(null)
-          setDeleteResult(null)
+          setDeleteResult(null) // Clear result after successful deletion message fades
         }, 1500)
       }
     } catch (error) {
+      // This catch block handles unexpected network errors or issues *before* the action returns
+      console.error("Client-side error calling deleteDailyInspectionForm:", error)
       setDeleteResult({
         success: false,
-        message: "An unexpected error occurred while deleting the form",
+        message: "An unexpected client-side error occurred. Check browser console.",
       })
     } finally {
       setIsDeleting(false)
     }
   }
-
-  console.log("Forms grouped by date:", formsByDate) // Debug log
 
   // Get calendar data for current month
   const year = currentDate.getFullYear()
@@ -117,7 +130,7 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
 
   // Generate 42 days (6 weeks) for the calendar grid
   for (let i = 0; i < 42; i++) {
-    const dateString = currentCalendarDate.toISOString().split("T")[0]
+    const dateString = currentCalendarDate.toISOString().split("T")[0] // Consistently format date for comparison
     const isCurrentMonth = currentCalendarDate.getMonth() === month
     const isToday = dateString === new Date().toISOString().split("T")[0]
     const dayForms = formsByDate[dateString] || []
@@ -189,8 +202,15 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
       {process.env.NODE_ENV === "development" && (
         <Card className="border-yellow-200 bg-yellow-50">
           <CardContent className="pt-4">
-            <p className="text-sm text-yellow-800">Debug: Total forms loaded: {forms.length}</p>
-            <p className="text-sm text-yellow-800">Dates with forms: {Object.keys(formsByDate).join(", ")}</p>
+            <p className="text-sm text-yellow-800">Debug: Total forms loaded (initialForms): {initialForms.length}</p>
+            <p className="text-sm text-yellow-800">Debug: Total forms in state: {forms.length}</p>
+            <p className="text-sm text-yellow-800">
+              Debug: Dates with forms (grouped): {Object.keys(formsByDate).join(", ") || "None"}
+            </p>
+            <p className="text-sm text-yellow-800">Debug: Currently selected date: {selectedDate || "None"}</p>
+            {selectedDate && (
+              <p className="text-sm text-yellow-800">Debug: Forms on selected date: {selectedDateForms.length}</p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -354,7 +374,7 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
 
       {/* Delete Confirmation Dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
+        <AlertDialogContent key={isDeleting ? "deleting-dialog" : "not-deleting-dialog"}>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Inspection Form</AlertDialogTitle>
             <AlertDialogDescription>Are you sure you want to delete this inspection form?</AlertDialogDescription>
@@ -386,8 +406,11 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
           )}
 
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel key={isDeleting ? "deleting-cancel" : "not-deleting-cancel"} disabled={isDeleting}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
+              key={isDeleting ? "deleting-action" : "not-deleting-action"}
               onClick={handleDeleteConfirm}
               disabled={isDeleting}
               className="bg-red-600 hover:bg-red-700"

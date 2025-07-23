@@ -1,10 +1,10 @@
 import "./globals.css"
-import { Inter, Fira_Code } from "next/font/google"
+import { Inter } from "next/font/google" // Removed Fira_Code
 import type { Metadata } from "next"
 import type React from "react"
+import { MainNav } from "@/components/main-nav" // Import the new MainNav component
 
 const inter = Inter({ subsets: ["latin"] })
-const fira = Fira_Code({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Daily Inspection Form",
@@ -18,8 +18,11 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={`${inter.className} ${fira.className}`}>
-      <body>{children}</body>
+    <html lang="en" className={inter.className}>
+      <body>
+        <MainNav /> {/* Add the navigation component here */}
+        {children}
+      </body>
     </html>
   )
 }

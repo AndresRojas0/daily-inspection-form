@@ -12,7 +12,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Plus, Trash2, Clock, MapPin, Users, CheckCircle, AlertCircle, FileSpreadsheet } from "lucide-react"
 import { saveDailyInspectionForm } from "@/lib/actions"
 import { ExcelUpload } from "@/components/excel-upload"
-import Link from "next/link"
+// Removed Link imports as navigation is now handled by MainNav
+// import Link from "next/link"
 
 interface ServiceCheck {
   id: string
@@ -220,8 +221,8 @@ export default function DailyInspectionApp() {
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="mx-auto max-w-2xl space-y-6">
-        {/* Debug Links */}
-        <div className="flex gap-2 mb-4">
+        {/* Removed Debug Links - now in MainNav */}
+        {/* <div className="flex gap-2 mb-4">
           <Link href="/debug">
             <Button variant="outline" size="sm">
               Debug Database
@@ -237,7 +238,7 @@ export default function DailyInspectionApp() {
               Dashboard
             </Button>
           </Link>
-        </div>
+        </div> */}
 
         {/* Submit Result Alert */}
         {submitResult && (

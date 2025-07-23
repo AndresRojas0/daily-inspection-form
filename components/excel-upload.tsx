@@ -38,6 +38,16 @@ const COLUMN_MAPPING = {
   infracción: "nonCompliance",
   infraccion: "nonCompliance",
   incumplimiento: "nonCompliance",
+  "line number": "lineOrRouteNumber",
+  driver: "driverName",
+  "service number": "serviceCode",
+  "coach number": "fleetCoachNumber",
+  hour: "exactHourOfArrival",
+  "gps variance": "gpsMinutes",
+  "passengers number": "passengersOnBoard",
+  "passes number": "passesUsed",
+  address: "addressOfStop",
+  "observations...": "observations",
 }
 
 const gpsStatus = (m: number) => (m < 0 ? "late" : m >= 2 ? "early" : "on-time")
