@@ -104,15 +104,17 @@ const parseGpsVariance = (gpsValue: any): number => {
     console.log(`parseGpsVariance: After removing outer parentheses: "${gpsString}"`)
   }
 
-  // Step 2: Try to parse as mm:ss format (e.g., "+02:30", "-01:45")
+  // Step 2: Try to parse as hh:mm format (from Excel) and convert to minutes.seconds
   const timeMatch = gpsString.match(/^([+-]?)(\d+):(\d+)$/)
   if (timeMatch) {
     const sign = timeMatch[1] === "-" ? -1 : 1
-    const minutes = Number.parseInt(timeMatch[2], 10) || 0
-    const seconds = Number.parseInt(timeMatch[3], 10) || 0
-    const totalMinutes = minutes + seconds / 60
+    const hours = Number.parseInt(timeMatch[2], 10) || 0 // This is 'hh' from Excel
+    const minutes = Number.parseInt(timeMatch[3], 10) || 0 // This is 'mm' from Excel
+    // User wants hh from Excel to be minutes, and mm from Excel to be seconds.
+    // So, total minutes = hours (from Excel) + minutes (from Excel) / 60
+    const totalMinutes = hours + minutes / 60
     console.log(
-      `parseGpsVariance: Parsed as mm:ss. Sign: ${sign}, Minutes: ${minutes}, Seconds: ${seconds}, Total: ${sign * totalMinutes}`,
+      `parseGpsVariance: Parsed as hh:mm. Sign: ${sign}, Hours (as minutes): ${hours}, Minutes (as seconds): ${minutes}, Total: ${sign * totalMinutes}`,
     )
     return sign * totalMinutes
   }
