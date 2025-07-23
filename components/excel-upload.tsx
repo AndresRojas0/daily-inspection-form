@@ -61,6 +61,45 @@ function parseGps(v: any): number {
   return isNaN(n) ? 0 : n
 }
 
+function findDataStartRow(rawData: any[][]): number {
+  // Define a set of critical columns that must be present in the header row
+  const criticalColumns = [
+    "línea",
+    "linea", // lineOrRouteNumber
+    "conductor", // driverName
+    "servicio", // serviceCode
+    "coche", // fleetCoachNumber
+    "hora", // exactHourOfArrival
+    "gps", // gpsMinutes
+    "parada", // addressOfStop
+  ].map(normalize) // Normalize once for comparison
+
+  for (let i = 0; i < rawData.length; i++) {
+    const row = rawData[i]
+    if (row && row.length > 0) {
+      const normalizedRowCells = row.map((cell) => normalize(cell))
+      console.log(`DEBUG: findDataStartRow: Checking row ${i}, normalized cells:`, normalizedRowCells) // DEBUG: Log normalized cells
+
+      let foundCriticalCount = 0
+      for (const criticalCol of criticalColumns) {
+        if (normalizedRowCells.includes(criticalCol)) {
+          foundCriticalCount++
+        }
+      }
+
+      // Require at least 5 out of the 7 critical columns to be present
+      // This threshold can be adjusted if your Excel files vary significantly
+      if (foundCriticalCount >= 5) {
+        console.log(
+          `DEBUG: findDataStartRow: Found potential header row at index ${i} with ${foundCriticalCount} critical matches.`,
+        )
+        return i
+      }
+    }
+  }
+  return -1
+}
+
 function excelArrayToJson(uint8: Uint8Array) {
   const wb = XLSX.read(uint8, { type: "array" })
   const ws = wb.Sheets[wb.SheetNames[0]]
@@ -86,7 +125,7 @@ function excelArrayToJson(uint8: Uint8Array) {
   console.log("DEBUG: Extracted Header Info:", headerInfo) // DEBUG: Log extracted header info
 
   // find data header
-  const dataHeaderRowIndex = raw.findIndex((r) => r.some((c: any) => COLUMN_MAPPING[normalize(String(c || ""))]))
+  const dataHeaderRowIndex = findDataStartRow(raw) // Use the improved findDataStartRow
   console.log("DEBUG: Detected Data Header Row Index:", dataHeaderRowIndex) // DEBUG: Log detected header row index
 
   if (dataHeaderRowIndex === -1) throw new Error("Service-data columns (Línea, Conductor …) not found")
@@ -123,18 +162,27 @@ function excelArrayToJson(uint8: Uint8Array) {
           `DEBUG: Row ${idx}, Col ${colIndex} (Field: ${fieldName}): Raw Value='${val}', Trimmed='${trimmedVal}'`,
         ) // DEBUG: Log each cell value
 
-        if (trimmedVal === "") return // Skip if empty after trim
-
-        if (fieldName === "exactHourOfArrival") {
-          obj[fieldName] = typeof val === "number" ? XLSX.SSF.format("hh:mm:ss", val) : trimmedVal
-        } else if (fieldName === "gpsMinutes") {
-          obj[fieldName] = parseGps(val)
-        } else if (fieldName === "passengersOnBoard" || fieldName === "passesUsed") {
-          obj[fieldName] = +trimmedVal || 0
-        } else if (fieldName === "nonCompliance") {
-          obj[fieldName] = /^(true|1|yes|sí|si)$/i.test(trimmedVal)
+        // Only assign if the trimmed value is not empty
+        if (trimmedVal !== "") {
+          if (fieldName === "exactHourOfArrival") {
+            obj[fieldName] = typeof val === "number" ? XLSX.SSF.format("hh:mm:ss", val) : trimmedVal
+          } else if (fieldName === "gpsMinutes") {
+            obj[fieldName] = parseGps(val)
+          } else if (fieldName === "passengersOnBoard" || fieldName === "passesUsed") {
+            obj[fieldName] = +trimmedVal || 0
+          } else if (fieldName === "nonCompliance") {
+            obj[fieldName] = /^(true|1|yes|sí|si)$/i.test(trimmedVal)
+          } else {
+            obj[fieldName] = trimmedVal
+          }
         } else {
-          obj[fieldName] = trimmedVal
+          // Explicitly set to empty string or default if trimmedVal is empty
+          obj[fieldName] = ""
+          if (fieldName === "passengersOnBoard" || fieldName === "passesUsed" || fieldName === "gpsMinutes") {
+            obj[fieldName] = 0 // Set numeric fields to 0 if empty
+          } else if (fieldName === "nonCompliance") {
+            obj[fieldName] = false // Set boolean field to false if empty
+          }
         }
 
         // Check if any of the key fields are populated
