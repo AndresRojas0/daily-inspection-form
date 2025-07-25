@@ -1,5 +1,7 @@
 "use client"
 
+import { Badge } from "@/components/ui/badge"
+
 import { useState } from "react"
 import { deleteDailyInspectionForm } from "@/lib/actions"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -38,9 +40,11 @@ interface InspectionStats {
 interface DashboardClientProps {
   initialForms: DailyInspectionFormDB[]
   initialStats: InspectionStats | null
+  topRoutes: { lineOrRouteNumber: string; count: number }[] // New prop
+  topStops: { addressOfStop: string; count: number }[] // New prop
 }
 
-export function DashboardClient({ initialForms, initialStats }: DashboardClientProps) {
+export function DashboardClient({ initialForms, initialStats, topRoutes, topStops }: DashboardClientProps) {
   const [forms, setForms] = useState(initialForms)
   const [stats, setStats] = useState(initialStats)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -175,6 +179,53 @@ export function DashboardClient({ initialForms, initialStats }: DashboardClientP
             <CardContent>
               <div className="text-2xl font-bold text-red-600">{getStatusCount("early") + getStatusCount("late")}</div>
               <p className="text-xs text-muted-foreground">GPS status early or late in last 30 days</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Top Routes and Stops */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Top 10 Routes */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 10 Routes (Current Month)</CardTitle>
+              <CardDescription>Most frequently inspected line or route numbers.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {topRoutes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No route data for the current month.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {topRoutes.map((route, index) => (
+                    <li key={index} className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{route.lineOrRouteNumber}</span>
+                      <Badge variant="secondary">{route.count}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Top 20 Stops */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 20 Stops (Current Month)</CardTitle>
+              <CardDescription>Most frequently inspected addresses of stops.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {topStops.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No stop data for the current month.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {topStops.map((stop, index) => (
+                    <li key={index} className="flex items-center justify-between text-sm">
+                      <span className="font-medium">{stop.addressOfStop}</span>
+                      <Badge variant="secondary">{stop.count}</Badge>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </CardContent>
           </Card>
         </div>

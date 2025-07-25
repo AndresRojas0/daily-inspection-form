@@ -319,3 +319,71 @@ export async function debugDatabaseData() {
     }
   }
 }
+
+export async function getTopRoutes(limit = 10) {
+  try {
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+
+    const topRoutes = await sql`
+      SELECT
+        line_or_route_number,
+        COUNT(*) as count
+      FROM service_checks
+      WHERE created_at >= ${startOfMonth.toISOString()} AND created_at < ${startOfNextMonth.toISOString()}
+      GROUP BY line_or_route_number
+      ORDER BY count DESC
+      LIMIT ${limit}
+    `
+
+    return {
+      success: true,
+      data: topRoutes.map((row) => ({
+        lineOrRouteNumber: row.line_or_route_number,
+        count: Number.parseInt(row.count),
+      })),
+    }
+  } catch (error) {
+    console.error("Error fetching top routes:", error)
+    return {
+      success: false,
+      message: "Failed to fetch top routes",
+      data: [],
+    }
+  }
+}
+
+export async function getTopStops(limit = 20) {
+  try {
+    const now = new Date()
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
+
+    const topStops = await sql`
+      SELECT
+        address_of_stop,
+        COUNT(*) as count
+      FROM service_checks
+      WHERE created_at >= ${startOfMonth.toISOString()} AND created_at < ${startOfNextMonth.toISOString()}
+      GROUP BY address_of_stop
+      ORDER BY count DESC
+      LIMIT ${limit}
+    `
+
+    return {
+      success: true,
+      data: topStops.map((row) => ({
+        addressOfStop: row.address_of_stop,
+        count: Number.parseInt(row.count),
+      })),
+    }
+  } catch (error) {
+    console.error("Error fetching top stops:", error)
+    return {
+      success: false,
+      message: "Failed to fetch top stops",
+      data: [],
+    }
+  }
+}
