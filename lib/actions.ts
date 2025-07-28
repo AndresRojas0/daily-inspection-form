@@ -121,6 +121,109 @@ export async function saveDailyInspectionForm(formData: DailyInspectionFormInput
   }
 }
 
+export async function updateDailyInspectionForm(formId: number, formData: DailyInspectionFormInput) {
+  try {
+    // Validate required fields
+    if (!formData.formHeader.inspectorName || !formData.formHeader.placeOfWork || !formData.formHeader.date) {
+      throw new Error("Missing required form header fields")
+    }
+
+    if (formData.serviceChecks.length === 0) {
+      throw new Error("At least one service check is required")
+    }
+
+    // Check if the form exists and was created today
+    const [existingForm] = (await sql`
+      SELECT * FROM daily_inspection_forms WHERE id = ${formId}
+    `) as DailyInspectionFormDB[]
+
+    if (!existingForm) {
+      throw new Error("Form not found")
+    }
+
+    // Check if the form was created today (allow editing only on the same day)
+    const today = new Date().toISOString().split("T")[0]
+    const formCreatedDate = new Date(existingForm.created_at).toISOString().split("T")[0]
+
+    if (formCreatedDate !== today) {
+      throw new Error("Forms can only be edited on the day they were created")
+    }
+
+    // Update the main form
+    await sql`
+      UPDATE daily_inspection_forms 
+      SET 
+        title = ${formData.formHeader.title},
+        inspector_name = ${formData.formHeader.inspectorName},
+        date = ${formData.formHeader.date},
+        place_of_work = ${formData.formHeader.placeOfWork},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${formId}
+    `
+
+    // Delete existing service checks
+    await sql`
+      DELETE FROM service_checks WHERE form_id = ${formId}
+    `
+
+    // Insert updated service checks
+    const serviceCheckPromises = formData.serviceChecks.map((check) => {
+      // Validate required fields for each service check
+      if (
+        !check.lineOrRouteNumber ||
+        !check.driverName ||
+        !check.serviceCode ||
+        !check.fleetCoachNumber ||
+        !check.exactHourOfArrival ||
+        !check.addressOfStop
+      ) {
+        throw new Error("Missing required service check fields")
+      }
+
+      return sql`
+        INSERT INTO service_checks (
+          form_id, line_or_route_number, driver_name, service_code,
+          fleet_coach_number, exact_hour_of_arrival, gps_minutes, gps_status,
+          passengers_on_board, passes_used, address_of_stop, observations, non_compliance
+        ) VALUES (
+          ${formId},
+          ${check.lineOrRouteNumber},
+          ${check.driverName},
+          ${check.serviceCode},
+          ${check.fleetCoachNumber},
+          ${check.exactHourOfArrival},
+          ${check.gpsStatus.minutes},
+          ${check.gpsStatus.status},
+          ${check.passengersOnBoard},
+          ${check.passesUsed},
+          ${check.addressOfStop},
+          ${check.observations || null},
+          ${check.nonCompliance || false}
+        )
+        RETURNING *
+      `
+    })
+
+    await Promise.all(serviceCheckPromises)
+
+    revalidatePath("/dashboard")
+    revalidatePath("/calendar")
+    revalidatePath(`/dashboard/${formId}`)
+
+    return {
+      success: true,
+      message: "Daily inspection form updated successfully",
+      formId: formId,
+    }
+  } catch (error) {
+    console.error("Error updating daily inspection form:", error)
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to update daily inspection form",
+    }
+  }
+}
+
 export async function getDailyInspectionForms(limit = 50, offset = 0) {
   try {
     const forms = (await sql`

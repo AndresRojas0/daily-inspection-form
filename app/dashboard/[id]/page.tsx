@@ -3,7 +3,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { ArrowLeft, Calendar, MapPin, User, Clock, Users, FileText, MessageSquare, AlertCircle } from "lucide-react"
+import {
+  ArrowLeft,
+  Calendar,
+  MapPin,
+  User,
+  Clock,
+  Users,
+  FileText,
+  MessageSquare,
+  AlertCircle,
+  Edit,
+} from "lucide-react"
 import Link from "next/link"
 import { notFound } from "next/navigation"
 
@@ -62,6 +73,11 @@ export default async function FormDetailPage({ params }: PageProps) {
     hour12: false, // Use 24-hour format
   }
 
+  // Check if form can be edited (created today)
+  const today = new Date().toISOString().split("T")[0]
+  const formCreatedDate = new Date(form.created_at).toISOString().split("T")[0]
+  const canEdit = formCreatedDate === today
+
   return (
     <div className="min-h-screen bg-gray-50 p-4">
       <div className="mx-auto max-w-4xl space-y-6">
@@ -79,7 +95,27 @@ export default async function FormDetailPage({ params }: PageProps) {
               <p className="text-gray-600">Form ID: {form.id}</p>
             </div>
           </div>
+          {canEdit && (
+            <Link href={`/dashboard/${form.id}/edit`}>
+              <Button>
+                <Edit className="w-4 h-4 mr-2" />
+                Edit Form
+              </Button>
+            </Link>
+          )}
         </div>
+
+        {/* Edit Notice */}
+        {canEdit && (
+          <Card className="border-blue-200 bg-blue-50">
+            <CardContent className="pt-4">
+              <p className="text-sm text-blue-800">
+                <strong>Note:</strong> This form was created today and can be edited. Forms can only be edited on the
+                day they were created.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Form Header Information */}
         <Card>
@@ -90,6 +126,11 @@ export default async function FormDetailPage({ params }: PageProps) {
             </CardTitle>
             <CardDescription>
               Created on {new Date(form.created_at).toLocaleString("en-US", dateTimeOptions)}
+              {form.updated_at !== form.created_at && (
+                <span className="ml-2 text-orange-600">
+                  • Last updated: {new Date(form.updated_at).toLocaleString("en-US", dateTimeOptions)}
+                </span>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
