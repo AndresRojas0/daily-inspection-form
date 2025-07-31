@@ -48,8 +48,7 @@ export default function DailyInspectionApp() {
     formHeader: {
       title: "DAILY INSPECTION FORM",
       inspectorName: "",
-      date: new Date().toString(),
-      // date: new Date().toISOString().split("T")[0],
+      date: new Date().toISOString().split("T")[0],
       placeOfWork: "",
     },
     serviceChecks: [],

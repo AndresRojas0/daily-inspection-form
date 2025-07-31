@@ -24,10 +24,8 @@ export default async function EditFormPage({ params }: PageProps) {
   const form = result.data
 
   // Check if form can be edited (created today)
-  const today = new Date().toString()
-  // const today = new Date().toISOString().split("T")[0]
-  const formCreatedDate = new Date(form.created_at).toString()
-  // const formCreatedDate = new Date(form.created_at).toISOString().split("T")[0]
+  const today = new Date().toISOString().split("T")[0]
+  const formCreatedDate = new Date(form.created_at).toISOString().split("T")[0]
 
   if (formCreatedDate !== today) {
     notFound() // Return 404 if trying to edit a form not created today
