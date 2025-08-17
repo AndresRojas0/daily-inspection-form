@@ -59,8 +59,10 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
   // Ensure the date string is consistently 'YYYY-MM-DD' for grouping and comparison
   const formsByDate = forms.reduce(
     (acc, form) => {
-      // Create a Date object from the form.date to normalize it to UTC and then get YYYY-MM-DD
-      const date = new Date(form.date).toISOString().split("T")[0]
+      // Parse the date in UTC-3 timezone and get YYYY-MM-DD format
+      const date = new Date(form.date + "T00:00:00").toLocaleDateString("en-CA", {
+        timeZone: "America/Argentina/Buenos_Aires",
+      })
       if (!acc[date]) {
         acc[date] = []
       }
@@ -130,9 +132,10 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
 
   // Generate 42 days (6 weeks) for the calendar grid
   for (let i = 0; i < 42; i++) {
-    const dateString = currentCalendarDate.toISOString().split("T")[0] // Consistently format date for comparison
+    const dateString = currentCalendarDate.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })
     const isCurrentMonth = currentCalendarDate.getMonth() === month
-    const isToday = dateString === new Date().toISOString().split("T")[0]
+    const isToday =
+      dateString === new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })
     const dayForms = formsByDate[dateString] || []
 
     calendarDays.push({
@@ -177,7 +180,7 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
 
   const goToToday = () => {
     setCurrentDate(new Date())
-    setSelectedDate(new Date().toISOString().split("T")[0])
+    setSelectedDate(new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }))
   }
 
   const selectedDateForms = selectedDate ? formsByDate[selectedDate] || [] : []
@@ -300,6 +303,7 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
               <FileText className="w-5 h-5" />
               Forms for{" "}
               {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
+                timeZone: "America/Argentina/Buenos_Aires",
                 weekday: "long",
                 year: "numeric",
                 month: "long",
@@ -345,7 +349,15 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
                       </div>
                       <div className="text-xs text-gray-400 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        Created {new Date(form.created_at).toLocaleString()}
+                        Created{" "}
+                        {new Date(form.created_at).toLocaleString("en-US", {
+                          timeZone: "America/Argentina/Buenos_Aires",
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -384,7 +396,12 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
             <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm">
               <p className="font-medium">{formToDelete.inspector_name}</p>
               <p className="text-gray-600">{formToDelete.place_of_work}</p>
-              <p className="text-gray-600">Date: {new Date(formToDelete.date).toLocaleDateString()}</p>
+              <p className="text-gray-600">
+                Date:{" "}
+                {new Date(formToDelete.date + "T00:00:00").toLocaleDateString("en-US", {
+                  timeZone: "America/Argentina/Buenos_Aires",
+                })}
+              </p>
             </div>
           )}
 

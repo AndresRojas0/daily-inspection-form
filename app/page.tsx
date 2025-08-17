@@ -48,7 +48,7 @@ export default function DailyInspectionApp() {
     formHeader: {
       title: "DAILY INSPECTION FORM",
       inspectorName: "",
-      date: new Date().toISOString().split("T")[0],
+      date: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), // Use UTC-3 and ISO format
       placeOfWork: "",
     },
     serviceChecks: [],
@@ -149,7 +149,7 @@ export default function DailyInspectionApp() {
           formHeader: {
             title: "DAILY INSPECTION FORM",
             inspectorName: "",
-            date: new Date().toISOString().split("T")[0],
+            date: new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }), // Use UTC-3 and ISO format
             placeOfWork: "",
           },
           serviceChecks: [],

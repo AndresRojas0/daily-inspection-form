@@ -23,11 +23,13 @@ export default async function EditFormPage({ params }: PageProps) {
 
   const form = result.data
 
-  // Check if form can be edited (created today)
-  const today = new Date().toISOString().split("T")[0]
-  const formCreatedDate = new Date(form.created_at).toISOString().split("T")[0]
+  // Check if form can be edited (created today in UTC-3)
+  const todayUTC3 = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })
+  const formCreatedDateUTC3 = new Date(form.created_at).toLocaleDateString("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+  })
 
-  if (formCreatedDate !== today) {
+  if (formCreatedDateUTC3 !== todayUTC3) {
     notFound() // Return 404 if trying to edit a form not created today
   }
 

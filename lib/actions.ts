@@ -132,7 +132,7 @@ export async function updateDailyInspectionForm(formId: number, formData: DailyI
       throw new Error("At least one service check is required")
     }
 
-    // Check if the form exists and was created today
+    // Check if the form exists and was created today (in UTC-3)
     const [existingForm] = (await sql`
       SELECT * FROM daily_inspection_forms WHERE id = ${formId}
     `) as DailyInspectionFormDB[]
@@ -141,11 +141,13 @@ export async function updateDailyInspectionForm(formId: number, formData: DailyI
       throw new Error("Form not found")
     }
 
-    // Check if the form was created today (allow editing only on the same day)
-    const today = new Date().toISOString().split("T")[0]
-    const formCreatedDate = new Date(existingForm.created_at).toISOString().split("T")[0]
+    // Check if the form was created today in UTC-3 timezone
+    const todayUTC3 = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })
+    const formCreatedDateUTC3 = new Date(existingForm.created_at).toLocaleDateString("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+    })
 
-    if (formCreatedDate !== today) {
+    if (formCreatedDateUTC3 !== todayUTC3) {
       throw new Error("Forms can only be edited on the day they were created")
     }
 

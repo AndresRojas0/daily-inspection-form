@@ -261,13 +261,25 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
                       </div>
                       <div className="text-sm text-gray-600 flex items-center gap-2">
                         <Calendar className="w-3 h-3" />
-                        <span>{new Date(form.date).toLocaleDateString()}</span>
+                        <span>
+                          {new Date(form.date + "T00:00:00").toLocaleDateString("en-US", {
+                            timeZone: "America/Argentina/Buenos_Aires",
+                          })}
+                        </span>
                         <span>•</span>
                         <span>{form.place_of_work}</span>
                       </div>
                       <div className="text-xs text-gray-400 flex items-center gap-1">
                         <Clock className="w-3 h-3" />
-                        Created {new Date(form.created_at).toLocaleString()}
+                        Created{" "}
+                        {new Date(form.created_at).toLocaleString("en-US", {
+                          timeZone: "America/Argentina/Buenos_Aires",
+                          year: "numeric",
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -304,7 +316,12 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
               <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm">
                 <p className="font-medium">{formToDelete.inspector_name}</p>
                 <p className="text-gray-600">{formToDelete.place_of_work}</p>
-                <p className="text-gray-600">Date: {new Date(formToDelete.date).toLocaleDateString()}</p>
+                <p className="text-gray-600">
+                  Date:{" "}
+                  {new Date(formToDelete.date + "T00:00:00").toLocaleDateString("en-US", {
+                    timeZone: "America/Argentina/Buenos_Aires",
+                  })}
+                </p>
               </div>
             )}
 

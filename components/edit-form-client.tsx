@@ -55,7 +55,9 @@ export function EditFormClient({ form: initialForm }: EditFormClientProps) {
     formHeader: {
       title: initialForm.title,
       inspectorName: initialForm.inspector_name,
-      date: initialForm.date,
+      date: new Date(initialForm.date + "T00:00:00").toLocaleDateString("en-CA", {
+        timeZone: "America/Argentina/Buenos_Aires",
+      }),
       placeOfWork: initialForm.place_of_work,
     },
     serviceChecks: initialForm.service_checks.map((check) => ({

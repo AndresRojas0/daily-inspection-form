@@ -73,10 +73,12 @@ export default async function FormDetailPage({ params }: PageProps) {
     hour12: false, // Use 24-hour format
   }
 
-  // Check if form can be edited (created today)
-  const today = new Date().toISOString().split("T")[0]
-  const formCreatedDate = new Date(form.created_at).toISOString().split("T")[0]
-  const canEdit = formCreatedDate === today
+  // Check if form can be edited (created today in UTC-3)
+  const todayUTC3 = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })
+  const formCreatedDateUTC3 = new Date(form.created_at).toLocaleDateString("en-CA", {
+    timeZone: "America/Argentina/Buenos_Aires",
+  })
+  const canEdit = formCreatedDateUTC3 === todayUTC3
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
