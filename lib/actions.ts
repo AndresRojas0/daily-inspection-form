@@ -361,6 +361,7 @@ export async function getInspectionStats() {
   try {
     const [totalForms] = await sql`
       SELECT COUNT(*) as count FROM daily_inspection_forms
+      WHERE date >= DATE_TRUNC('month', CURRENT_DATE)
     `
 
     const [totalChecks] = await sql`
@@ -377,7 +378,7 @@ export async function getInspectionStats() {
         gps_status,
         COUNT(*) as count
       FROM service_checks 
-      WHERE created_at >= CURRENT_DATE - INTERVAL '30 days'
+      WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)
       GROUP BY gps_status
     `
 
