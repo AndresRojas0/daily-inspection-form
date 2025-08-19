@@ -54,11 +54,7 @@ const gpsStatus = (m: number) => (m < 0 ? "late" : m >= 2 ? "early" : "on-time")
 
 function parseGps(v: any): number {
   if (v === null || v === undefined || String(v).trim() === "") return 0 // Handle null, undefined, or empty string
-  let s = String(v).trim() // Ensure it's a string
-
-  // Remove parentheses if present
-  s = s.replace(/[()]/g, '')
-
+  const s = String(v).trim() // Ensure it's a string
   if (/^[+-]?\d+:\d+$/.test(s)) {
     const match = s.match(/^([+-]?)(\d+):(\d+)$/)
     if (match) {

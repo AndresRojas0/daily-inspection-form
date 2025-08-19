@@ -60,7 +60,7 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
   const formsByDate = forms.reduce(
     (acc, form) => {
       // Parse the date in UTC-3 timezone and get YYYY-MM-DD format
-      const date = new Date(form.date + "T00:00:00").toLocaleDateString("en-CA", {
+      const date = new Date(form.date).toLocaleDateString("en-CA", {
         timeZone: "America/Argentina/Buenos_Aires",
       })
       if (!acc[date]) {

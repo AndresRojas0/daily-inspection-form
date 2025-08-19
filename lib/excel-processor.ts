@@ -63,8 +63,7 @@ function parseGpsVariance(gpsValue: any): number {
   let gpsString = gpsValue.toString().trim()
 
   // Remove parentheses if present: (+mm:ss) or (-mm:ss)
-  // gpsString = gpsString.replace(/^$$(.+)$$$/, "$1")
-  gpsString = gpsString.replace(/^\((.+)\)$/, "$1")
+  gpsString = gpsString.replace(/^$$(.+)$$$/, "$1")
 
   // Handle different GPS formats
   // +mm, -mm, +mm:ss, -mm:ss, (+mm:ss), (-mm:ss)
