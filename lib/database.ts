@@ -38,3 +38,13 @@ export interface ServiceCheckDB {
 export interface DailyInspectionFormWithChecks extends DailyInspectionFormDB {
   service_checks: ServiceCheckDB[]
 }
+
+export interface NonComplianceReportDB {
+  id: number
+  service_check_id: number
+  status: "open" | "in_progress" | "resolved"
+  assigned_to: string | null
+  resolution_notes: string | null
+  created_at: string
+  updated_at: string
+}

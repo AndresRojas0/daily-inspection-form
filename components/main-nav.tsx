@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Home, Bug, LayoutDashboard, FileText, Menu } from "lucide-react" // Import Menu icon
+import { Home, Bug, LayoutDashboard, FileText, Menu, AlertTriangle } from "lucide-react" // Import Menu icon
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet" // Import Sheet components
 
 export function MainNav() {
@@ -45,6 +45,12 @@ export function MainNav() {
                   </Link>
                 </Button>
                 <Button variant="ghost" size="sm" asChild className="justify-start">
+                  <Link href="/non-compliance">
+                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    Non-Compliance
+                  </Link>
+                </Button>
+                <Button variant="ghost" size="sm" asChild className="justify-start">
                   <Link href="/test-form">
                     <Bug className="h-4 w-4 mr-2" />
                     Test Form
@@ -83,6 +89,12 @@ export function MainNav() {
               <Link href="/calendar">
                 <FileText className="h-4 w-4 mr-2" />
                 Calendar
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/non-compliance">
+                <AlertTriangle className="h-4 w-4 mr-2" />
+                Non-Compliance
               </Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>

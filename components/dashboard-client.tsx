@@ -17,7 +17,18 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Calendar, FileText, Users, Clock, Trash2, CheckCircle, AlertCircle, LayoutDashboard } from "lucide-react"
+import {
+  Plus,
+  Calendar,
+  FileText,
+  Users,
+  Clock,
+  Trash2,
+  CheckCircle,
+  AlertCircle,
+  LayoutDashboard,
+  AlertTriangle,
+} from "lucide-react"
 import Link from "next/link"
 
 interface DailyInspectionFormDB {
@@ -37,14 +48,28 @@ interface InspectionStats {
   statusStats: { status: string; count: number }[]
 }
 
+interface NonComplianceStats {
+  open: number
+  in_progress: number
+  resolved: number
+  total: number
+}
+
 interface DashboardClientProps {
   initialForms: DailyInspectionFormDB[]
   initialStats: InspectionStats | null
-  topRoutes: { lineOrRouteNumber: string; count: number }[] // New prop
-  topStops: { addressOfStop: string; count: number }[] // New prop
+  topRoutes: { lineOrRouteNumber: string; count: number }[]
+  topStops: { addressOfStop: string; count: number }[]
+  nonComplianceStats: NonComplianceStats | null
 }
 
-export function DashboardClient({ initialForms, initialStats, topRoutes, topStops }: DashboardClientProps) {
+export function DashboardClient({
+  initialForms,
+  initialStats,
+  topRoutes,
+  topStops,
+  nonComplianceStats,
+}: DashboardClientProps) {
   const [forms, setForms] = useState(initialForms)
   const [stats, setStats] = useState(initialStats)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -140,7 +165,7 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
         )}
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Forms (current month)</CardTitle>
@@ -179,6 +204,16 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
             <CardContent>
               <div className="text-2xl font-bold text-red-600">{getStatusCount("early") + getStatusCount("late")}</div>
               <p className="text-xs text-muted-foreground">GPS status early or late in current month</p>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Open Non-Compliances</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-orange-600">{nonComplianceStats?.open ?? 0}</div>
+              <p className="text-xs text-muted-foreground">Total open non-compliance reports</p>
             </CardContent>
           </Card>
         </div>
