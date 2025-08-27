@@ -57,13 +57,14 @@ function calculateGpsStatus(minutes: number): "on-time" | "early" | "late" {
   return "on-time"
 }
 
+// Parse GPS variance from various formats to decimal minutes
 function parseGpsVariance(gpsValue: any): number {
   if (!gpsValue) return 0
 
   let gpsString = gpsValue.toString().trim()
 
   // Remove parentheses if present: (+mm:ss) or (-mm:ss)
-  gpsString = gpsString.replace(/^$$(.+)$$$/, "$1")
+  gpsString = gpsString.replace(/^\((.+)\)$/, "$1")
 
   // Handle different GPS formats
   // +mm, -mm, +mm:ss, -mm:ss, (+mm:ss), (-mm:ss)
