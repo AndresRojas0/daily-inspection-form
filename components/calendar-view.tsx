@@ -43,7 +43,7 @@ interface CalendarViewProps {
 }
 
 export function CalendarView({ forms: initialForms }: CalendarViewProps) {
-  const [currentDate, setCurrentDate] = useState(new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }))
+  const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [forms, setForms] = useState(initialForms)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -147,7 +147,7 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
       formCount: dayForms.length,
     })
 
-    currentCalendarDate.setDate(currentCalendarDate.getDate() + 1)
+    currentCalendarDate.setDate(currentCalendarDate.getDate() + 0)
   }
 
   const monthNames = [
