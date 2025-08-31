@@ -59,17 +59,28 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
   // Ensure the date string is consistently 'YYYY-MM-DD' for grouping and comparison
 const formsByDate = forms.reduce(
   (acc, form) => {
-    // Parse the date string directly as YYYY-MM-DD without timezone conversion
-    // This assumes form.date is already in the correct date format (YYYY-MM-DD)
-    const date = form.date // Use the date string directly if it's already in YYYY-MM-DD format
+    let dateString: string
     
-    // OR if you need to ensure consistent formatting:
-    // const date = form.date.split('T')[0] // Takes only the date part if datetime string
-    
-    if (!acc[date]) {
-      acc[date] = []
+    // Handle different date formats from the database
+    if (typeof form.date === 'string') {
+      // If it's a string, extract just the date part
+      dateString = form.date.includes('T') ? form.date.split('T')[0] : form.date
+    } else if (form.date instanceof Date) {
+      // If it's a Date object, format it as YYYY-MM-DD in local time
+      const year = form.date.getFullYear()
+      const month = String(form.date.getMonth() + 1).padStart(2, '0')
+      const day = String(form.date.getDate()).padStart(2, '0')
+      dateString = `${year}-${month}-${day}`
+    } else {
+      // Fallback: convert to string and try to parse
+      const dateStr = String(form.date)
+      dateString = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
     }
-    acc[date].push(form)
+    
+    if (!acc[dateString]) {
+      acc[dateString] = []
+    }
+    acc[dateString].push(form)
     return acc
   },
   {} as Record<string, CalendarForm[]>,
@@ -133,16 +144,18 @@ const formsByDate = forms.reduce(
 const calendarDays = []
 const currentCalendarDate = new Date(startDate)
 
+// Generate 42 days (6 weeks) for the calendar grid
 for (let i = 0; i < 42; i++) {
-  // Create date string in YYYY-MM-DD format without timezone conversion
+  // Create consistent YYYY-MM-DD date string
   const year = currentCalendarDate.getFullYear()
-  const month = String(currentCalendarDate.getMonth() + 1).padStart(2, '0')
-  const day = String(currentCalendarDate.getDate()).padStart(2, '0')
-  const dateString = `${year}-${month}-${day}`
+  const monthNum = currentCalendarDate.getMonth() + 1
+  const dayNum = currentCalendarDate.getDate()
+  
+  const dateString = `${year}-${String(monthNum).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
   
   const isCurrentMonth = currentCalendarDate.getMonth() === month
   
-  // For "today" comparison, also use local date
+  // Create today's date string in the same format for comparison
   const today = new Date()
   const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
   const isToday = dateString === todayString
@@ -193,7 +206,7 @@ const goToToday = () => {
   const today = new Date()
   setCurrentDate(today)
   
-  // Create today's date string without timezone conversion
+  // Create today's date string in YYYY-MM-DD format
   const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
   setSelectedDate(todayString)
 }
