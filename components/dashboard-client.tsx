@@ -44,6 +44,65 @@ interface DashboardClientProps {
   topStops: { addressOfStop: string; count: number }[] // New prop
 }
 
+// Helper function to safely format dates - handles any input type
+const formatDate = (dateInput: any, options?: Intl.DateTimeFormatOptions) => {
+  try {
+    // Handle null, undefined, empty string
+    if (!dateInput || dateInput === '') {
+      return 'No date';
+    }
+    
+    let date: Date;
+    
+    // If it's already a Date object
+    if (dateInput instanceof Date) {
+      date = dateInput;
+    }
+    // If it's a number (timestamp)
+    else if (typeof dateInput === 'number') {
+      date = new Date(dateInput);
+    }
+    // If it's a string
+    else if (typeof dateInput === 'string') {
+      // If it's already a valid ISO string or timestamp
+      if (!isNaN(Date.parse(dateInput))) {
+        date = new Date(dateInput);
+      }
+      // If it's in YYYY-MM-DD format (common from databases)
+      else if (dateInput.match(/^\d{4}-\d{2}-\d{2}$/)) {
+        // Add time to avoid timezone issues with date-only strings
+        date = new Date(dateInput + 'T00:00:00');
+      }
+      // If it's in MM/DD/YYYY format
+      else if (dateInput.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
+        date = new Date(dateInput);
+      }
+      else {
+        // Fallback: try to parse as-is
+        date = new Date(dateInput);
+      }
+    }
+    else {
+      // Try to convert whatever it is to a date
+      date = new Date(dateInput);
+    }
+    
+    // Check if the date is valid
+    if (isNaN(date.getTime())) {
+      console.warn('Invalid date input:', dateInput, 'Type:', typeof dateInput);
+      return 'Invalid Date';
+    }
+    
+    return date.toLocaleDateString("en-US", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      ...options
+    });
+  } catch (error) {
+    console.error('Error formatting date:', dateInput, 'Type:', typeof dateInput, 'Error:', error);
+    return 'Invalid Date';
+  }
+};
+
 export function DashboardClient({ initialForms, initialStats, topRoutes, topStops }: DashboardClientProps) {
   const [forms, setForms] = useState(initialForms)
   const [stats, setStats] = useState(initialStats)
@@ -261,14 +320,7 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
                       </div>
                       <div className="text-sm text-gray-600 flex items-center gap-2">
                         <Calendar className="w-3 h-3" />
-                        <span>
-                          {form.date instanceof Date ?
-                            form.date.toLocaleDateString("en-US", {
-                              timeZone: "America/Argentina/Buenos_Aires",
-                            }) : 
-                            'Invalid Date'
-                          }
-                        </span>
+<span>{formatDate(form.date)}</span>
                         <span>•</span>
                         <span>{form.place_of_work}</span>
                       </div>

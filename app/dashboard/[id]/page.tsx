@@ -290,10 +290,17 @@ export default async function FormDetailPage({ params }: PageProps) {
             <CardTitle className="text-lg">Form Summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 text-center">
               <div className="p-3 bg-blue-50 rounded-lg">
                 <p className="text-sm text-blue-600">Total Checks</p>
                 <p className="text-2xl font-bold text-blue-900">{form.service_checks.length}</p>
+              </div>
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-600">Total Passengers</p>
+                <p className="text-2xl font-bold text-blue-900">{form.service_checks.map(check =>
+                  check.passengers_on_board)
+                  .reduce((accumulator, currentValue) => accumulator + currentValue, 0)}
+                </p>
               </div>
               <div className="p-3 bg-green-50 rounded-lg">
                 <p className="text-sm text-green-600">On-Time</p>
