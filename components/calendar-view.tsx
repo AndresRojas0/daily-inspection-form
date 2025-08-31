@@ -57,20 +57,23 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
 
   // Group forms by date
   // Ensure the date string is consistently 'YYYY-MM-DD' for grouping and comparison
-  const formsByDate = forms.reduce(
-    (acc, form) => {
-      // Parse the date in UTC-3 timezone and get YYYY-MM-DD format
-      const date = new Date(form.date).toLocaleDateString("en-CA", {
-        timeZone: "America/Argentina/Buenos_Aires",
-      })
-      if (!acc[date]) {
-        acc[date] = []
-      }
-      acc[date].push(form)
-      return acc
-    },
-    {} as Record<string, CalendarForm[]>,
-  )
+const formsByDate = forms.reduce(
+  (acc, form) => {
+    // Parse the date string directly as YYYY-MM-DD without timezone conversion
+    // This assumes form.date is already in the correct date format (YYYY-MM-DD)
+    const date = form.date // Use the date string directly if it's already in YYYY-MM-DD format
+    
+    // OR if you need to ensure consistent formatting:
+    // const date = form.date.split('T')[0] // Takes only the date part if datetime string
+    
+    if (!acc[date]) {
+      acc[date] = []
+    }
+    acc[date].push(form)
+    return acc
+  },
+  {} as Record<string, CalendarForm[]>,
+)
 
   useEffect(() => {
     if (selectedDate) {
@@ -127,28 +130,36 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
   const startDate = new Date(firstDay)
   startDate.setDate(startDate.getDate() - firstDay.getDay()) // Start from Sunday
 
-  const calendarDays = []
-  const currentCalendarDate = new Date(startDate)
+const calendarDays = []
+const currentCalendarDate = new Date(startDate)
 
-  // Generate 42 days (6 weeks) for the calendar grid
-  for (let i = 0; i < 42; i++) {
-    const dateString = currentCalendarDate.toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })
-    const isCurrentMonth = currentCalendarDate.getMonth() === month
-    const isToday =
-      dateString === new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })
-    const dayForms = formsByDate[dateString] || []
+for (let i = 0; i < 42; i++) {
+  // Create date string in YYYY-MM-DD format without timezone conversion
+  const year = currentCalendarDate.getFullYear()
+  const month = String(currentCalendarDate.getMonth() + 1).padStart(2, '0')
+  const day = String(currentCalendarDate.getDate()).padStart(2, '0')
+  const dateString = `${year}-${month}-${day}`
+  
+  const isCurrentMonth = currentCalendarDate.getMonth() === month
+  
+  // For "today" comparison, also use local date
+  const today = new Date()
+  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  const isToday = dateString === todayString
+  
+  const dayForms = formsByDate[dateString] || []
 
-    calendarDays.push({
-      date: new Date(currentCalendarDate),
-      dateString,
-      isCurrentMonth,
-      isToday,
-      forms: dayForms,
-      formCount: dayForms.length,
-    })
+  calendarDays.push({
+    date: new Date(currentCalendarDate),
+    dateString,
+    isCurrentMonth,
+    isToday,
+    forms: dayForms,
+    formCount: dayForms.length,
+  })
 
-    currentCalendarDate.setDate(currentCalendarDate.getDate() + 1)
-  }
+  currentCalendarDate.setDate(currentCalendarDate.getDate() + 1)
+}
 
   const monthNames = [
     "January",
@@ -178,10 +189,14 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
     setSelectedDate(null)
   }
 
-  const goToToday = () => {
-    setCurrentDate(new Date())
-    setSelectedDate(new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" }))
-  }
+const goToToday = () => {
+  const today = new Date()
+  setCurrentDate(today)
+  
+  // Create today's date string without timezone conversion
+  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
+  setSelectedDate(todayString)
+}
 
   const selectedDateForms = selectedDate ? formsByDate[selectedDate] || [] : []
 
