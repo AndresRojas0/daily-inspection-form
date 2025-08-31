@@ -147,7 +147,7 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
       formCount: dayForms.length,
     })
 
-    currentCalendarDate.setDate(currentCalendarDate.getDate() + 0)
+    currentCalendarDate.setDate(currentCalendarDate.getDate() + 1)
   }
 
   const monthNames = [
