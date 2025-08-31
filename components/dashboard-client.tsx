@@ -262,9 +262,12 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
                       <div className="text-sm text-gray-600 flex items-center gap-2">
                         <Calendar className="w-3 h-3" />
                         <span>
-                          {new Date(form.date + "T00:00:00").toLocaleDateString("en-US", {
-                            timeZone: "America/Argentina/Buenos_Aires",
-                          })}
+                          {form.date instanceof Date ?
+                            form.date.toLocaleDateString("en-US", {
+                              timeZone: "America/Argentina/Buenos_Aires",
+                            }) : 
+                            'Invalid Date'
+                          }
                         </span>
                         <span>•</span>
                         <span>{form.place_of_work}</span>
