@@ -364,8 +364,12 @@ export async function getInspectionStats() {
       WHERE date >= DATE_TRUNC('month', CURRENT_DATE)
     `
 
+    // Modified query to count service checks only from forms in the current month
     const [totalChecks] = await sql`
-      SELECT COUNT(*) as count FROM service_checks
+      SELECT COUNT(s.*) as count 
+      FROM service_checks s
+      INNER JOIN daily_inspection_forms f ON s.form_id = f.id
+      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
     `
 
     const [recentForms] = await sql`
@@ -375,11 +379,12 @@ export async function getInspectionStats() {
 
     const statusStats = await sql`
       SELECT 
-        gps_status,
+        s.gps_status,
         COUNT(*) as count
-      FROM service_checks 
-      WHERE created_at >= DATE_TRUNC('month', CURRENT_DATE)
-      GROUP BY gps_status
+      FROM service_checks s
+      INNER JOIN daily_inspection_forms f ON s.form_id = f.id
+      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+      GROUP BY s.gps_status
     `
 
     return {
