@@ -42,6 +42,50 @@ interface CalendarViewProps {
   forms: CalendarForm[]
 }
 
+// Helper function to safely parse date strings without timezone issues
+function parseFormDate(dateString: string): string {
+  // If the date is already in YYYY-MM-DD format, return as-is
+  if (typeof dateString === "string" && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    return dateString
+  }
+
+  // If it's a full datetime string, extract just the date part
+  if (typeof dateString === "string" && dateString.includes("T")) {
+    return dateString.split("T")[0]
+  }
+
+  // If it's some other format, try to parse it safely
+  try {
+    const date = new Date(dateString + "T00:00:00") // Force local time interpretation
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, "0")
+    const day = String(date.getDate()).padStart(2, "0")
+    return `${year}-${month}-${day}`
+  } catch (error) {
+    console.error("Error parsing date:", dateString, error)
+    return dateString
+  }
+}
+
+// Helper function to format date for display without timezone issues
+function formatDateForDisplay(dateString: string): string {
+  try {
+    // Parse the date string as local date to avoid timezone shifts
+    const [year, month, day] = dateString.split("-").map(Number)
+    const date = new Date(year, month - 1, day) // month is 0-indexed in JS Date
+
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    })
+  } catch (error) {
+    console.error("Error formatting date for display:", dateString, error)
+    return dateString
+  }
+}
+
 export function CalendarView({ forms: initialForms }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
@@ -55,36 +99,19 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
     console.log("Calendar View: Initial forms received:", forms.length, forms)
   }, [forms]) // Log initial forms and their count
 
-  // Group forms by date
-  // Ensure the date string is consistently 'YYYY-MM-DD' for grouping and comparison
-const formsByDate = forms.reduce(
-  (acc, form) => {
-    let dateString: string
-    
-    // Handle different date formats from the database
-    if (typeof form.date === 'string') {
-      // If it's a string, extract just the date part
-      dateString = form.date.includes('T') ? form.date.split('T')[0] : form.date
-    } else if (form.date instanceof Date) {
-      // If it's a Date object, format it as YYYY-MM-DD in local time
-      const year = form.date.getFullYear()
-      const month = String(form.date.getMonth() + 1).padStart(2, '0')
-      const day = String(form.date.getDate()).padStart(2, '0')
-      dateString = `${year}-${month}-${day}`
-    } else {
-      // Fallback: convert to string and try to parse
-      const dateStr = String(form.date)
-      dateString = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr
-    }
-    
-    if (!acc[dateString]) {
-      acc[dateString] = []
-    }
-    acc[dateString].push(form)
-    return acc
-  },
-  {} as Record<string, CalendarForm[]>,
-)
+  // Group forms by date using the safe date parsing
+  const formsByDate = forms.reduce(
+    (acc, form) => {
+      const dateString = parseFormDate(form.date)
+
+      if (!acc[dateString]) {
+        acc[dateString] = []
+      }
+      acc[dateString].push(form)
+      return acc
+    },
+    {} as Record<string, CalendarForm[]>,
+  )
 
   useEffect(() => {
     if (selectedDate) {
@@ -141,38 +168,38 @@ const formsByDate = forms.reduce(
   const startDate = new Date(firstDay)
   startDate.setDate(startDate.getDate() - firstDay.getDay()) // Start from Sunday
 
-const calendarDays = []
-const currentCalendarDate = new Date(startDate)
+  const calendarDays = []
+  const currentCalendarDate = new Date(startDate)
 
-// Generate 42 days (6 weeks) for the calendar grid
-for (let i = 0; i < 42; i++) {
-  // Create consistent YYYY-MM-DD date string
-  const year = currentCalendarDate.getFullYear()
-  const monthNum = currentCalendarDate.getMonth() + 1
-  const dayNum = currentCalendarDate.getDate()
-  
-  const dateString = `${year}-${String(monthNum).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`
-  
-  const isCurrentMonth = currentCalendarDate.getMonth() === month
-  
-  // Create today's date string in the same format for comparison
-  const today = new Date()
-  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  const isToday = dateString === todayString
-  
-  const dayForms = formsByDate[dateString] || []
+  // Generate 42 days (6 weeks) for the calendar grid
+  for (let i = 0; i < 42; i++) {
+    // Create consistent YYYY-MM-DD date string using local date components
+    const year = currentCalendarDate.getFullYear()
+    const monthNum = currentCalendarDate.getMonth() + 1
+    const dayNum = currentCalendarDate.getDate()
 
-  calendarDays.push({
-    date: new Date(currentCalendarDate),
-    dateString,
-    isCurrentMonth,
-    isToday,
-    forms: dayForms,
-    formCount: dayForms.length,
-  })
+    const dateString = `${year}-${String(monthNum).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`
 
-  currentCalendarDate.setDate(currentCalendarDate.getDate() + 1)
-}
+    const isCurrentMonth = currentCalendarDate.getMonth() === month
+
+    // Create today's date string in the same format for comparison
+    const today = new Date()
+    const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
+    const isToday = dateString === todayString
+
+    const dayForms = formsByDate[dateString] || []
+
+    calendarDays.push({
+      date: new Date(currentCalendarDate),
+      dateString,
+      isCurrentMonth,
+      isToday,
+      forms: dayForms,
+      formCount: dayForms.length,
+    })
+
+    currentCalendarDate.setDate(currentCalendarDate.getDate() + 1)
+  }
 
   const monthNames = [
     "January",
@@ -202,14 +229,14 @@ for (let i = 0; i < 42; i++) {
     setSelectedDate(null)
   }
 
-const goToToday = () => {
-  const today = new Date()
-  setCurrentDate(today)
-  
-  // Create today's date string in YYYY-MM-DD format
-  const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-  setSelectedDate(todayString)
-}
+  const goToToday = () => {
+    const today = new Date()
+    setCurrentDate(today)
+
+    // Create today's date string in YYYY-MM-DD format
+    const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`
+    setSelectedDate(todayString)
+  }
 
   const selectedDateForms = selectedDate ? formsByDate[selectedDate] || [] : []
 
@@ -242,6 +269,13 @@ const goToToday = () => {
             {selectedDate && (
               <p className="text-sm text-yellow-800">Debug: Forms on selected date: {selectedDateForms.length}</p>
             )}
+            <p className="text-sm text-yellow-800">
+              Debug: Sample form dates:{" "}
+              {forms
+                .slice(0, 3)
+                .map((f) => `ID:${f.id}=${parseFormDate(f.date)}`)
+                .join(", ")}
+            </p>
           </CardContent>
         </Card>
       )}
@@ -329,14 +363,7 @@ const goToToday = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5" />
-              Forms for{" "}
-              {new Date(selectedDate + "T00:00:00").toLocaleDateString("en-US", {
-                timeZone: "America/Argentina/Buenos_Aires",
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              })}
+              Forms for {formatDateForDisplay(selectedDate)}
             </CardTitle>
             <CardDescription>
               {selectedDateForms.length === 0
@@ -424,12 +451,7 @@ const goToToday = () => {
             <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm">
               <p className="font-medium">{formToDelete.inspector_name}</p>
               <p className="text-gray-600">{formToDelete.place_of_work}</p>
-              <p className="text-gray-600">
-                Date:{" "}
-                {new Date(formToDelete.date + "T00:00:00").toLocaleDateString("en-US", {
-                  timeZone: "America/Argentina/Buenos_Aires",
-                })}
-              </p>
+              <p className="text-gray-600">Date: {formatDateForDisplay(parseFormDate(formToDelete.date))}</p>
             </div>
           )}
 

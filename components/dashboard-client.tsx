@@ -44,7 +44,7 @@ interface DashboardClientProps {
   topStops: { addressOfStop: string; count: number }[] // New prop
 }
 
-// Helper function to safely format dates - handles any input type
+// Helper function to safely format dates without timezone issues
 const formatDate = (dateInput: any, options?: Intl.DateTimeFormatOptions) => {
   try {
     // Handle null, undefined, empty string
@@ -52,36 +52,38 @@ const formatDate = (dateInput: any, options?: Intl.DateTimeFormatOptions) => {
       return "No date"
     }
 
-    let date: Date
+    // If it's a string in YYYY-MM-DD format (from database), parse it as local date
+    if (typeof dateInput === "string" && dateInput.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [year, month, day] = dateInput.split("-").map(Number)
+      const date = new Date(year, month - 1, day) // month is 0-indexed
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        ...options,
+      })
+    }
 
-    // If it's already a Date object
+    // If it's a full datetime string, extract date part and parse as local
+    if (typeof dateInput === "string" && dateInput.includes("T")) {
+      const datePart = dateInput.split("T")[0]
+      const [year, month, day] = datePart.split("-").map(Number)
+      const date = new Date(year, month - 1, day)
+      return date.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        ...options,
+      })
+    }
+
+    // Fallback for other formats
+    let date: Date
     if (dateInput instanceof Date) {
       date = dateInput
-    }
-    // If it's a number (timestamp)
-    else if (typeof dateInput === "number") {
+    } else if (typeof dateInput === "number") {
       date = new Date(dateInput)
-    }
-    // If it's a string
-    else if (typeof dateInput === "string") {
-      // If it's already a valid ISO string or timestamp
-      if (!isNaN(Date.parse(dateInput))) {
-        date = new Date(dateInput)
-      }
-      // If it's in YYYY-MM-DD format (common from databases)
-      else if (dateInput.match(/^\d{4}-\d{2}-\d{2}$/)) {
-        // Add time to avoid timezone issues with date-only strings
-        date = new Date(dateInput + "T00:00:00")
-      }
-      // If it's in MM/DD/YYYY format
-      else if (dateInput.match(/^\d{1,2}\/\d{1,2}\/\d{4}$/)) {
-        date = new Date(dateInput)
-      } else {
-        // Fallback: try to parse as-is
-        date = new Date(dateInput)
-      }
     } else {
-      // Try to convert whatever it is to a date
       date = new Date(dateInput)
     }
 
@@ -92,7 +94,9 @@ const formatDate = (dateInput: any, options?: Intl.DateTimeFormatOptions) => {
     }
 
     return date.toLocaleDateString("en-US", {
-      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "short",
+      day: "numeric",
       ...options,
     })
   } catch (error) {
@@ -369,12 +373,7 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
               <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm">
                 <p className="font-medium">{formToDelete.inspector_name}</p>
                 <p className="text-gray-600">{formToDelete.place_of_work}</p>
-                <p className="text-gray-600">
-                  Date:{" "}
-                  {new Date(formToDelete.date + "T00:00:00").toLocaleDateString("en-US", {
-                    timeZone: "America/Argentina/Buenos_Aires",
-                  })}
-                </p>
+                <p className="text-gray-600">Date: {formatDate(formToDelete.date)}</p>
               </div>
             )}
 
