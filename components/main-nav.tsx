@@ -3,7 +3,7 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import { Home, Bug, LayoutDashboard, FileText, Menu } from "lucide-react" // Import Menu icon
+import { Home, Bug, LayoutDashboard, FileText, Menu, Ticket } from "lucide-react" // Import Ticket icon
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet" // Import Sheet components
 
 export function MainNav() {
@@ -30,6 +30,12 @@ export function MainNav() {
                   <Link href="/">
                     <Home className="h-4 w-4 mr-2" />
                     Form
+                  </Link>
+                </Button>
+                <Button variant="ghost" size="sm" asChild className="justify-start">
+                  <Link href="/out-of-section">
+                    <Ticket className="h-4 w-4 mr-2" />
+                    Out-of-Section
                   </Link>
                 </Button>
                 <Button variant="ghost" size="sm" asChild className="justify-start">
@@ -71,6 +77,12 @@ export function MainNav() {
               <Link href="/">
                 <Home className="h-4 w-4 mr-2" />
                 Form
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/out-of-section">
+                <Ticket className="h-4 w-4 mr-2" />
+                Out-of-Section
               </Link>
             </Button>
             <Button variant="ghost" size="sm" asChild>
