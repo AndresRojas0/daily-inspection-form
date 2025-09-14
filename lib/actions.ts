@@ -250,9 +250,13 @@ export async function getDailyInspectionForms(limit = 50, offset = 0) {
 
 export async function getDailyInspectionFormsForCalendar(startDate?: string, endDate?: string) {
   try {
+    console.log("=== DATABASE ACTION DEBUG ===")
+    console.log("getDailyInspectionFormsForCalendar called with:", { startDate, endDate })
+
     let forms
 
     if (startDate && endDate) {
+      console.log("Using date range query")
       forms = await sql`
         SELECT 
           f.id,
@@ -268,6 +272,7 @@ export async function getDailyInspectionFormsForCalendar(startDate?: string, end
         ORDER BY f.date DESC, f.created_at DESC
       `
     } else {
+      console.log("Using query without date range")
       forms = await sql`
         SELECT 
           f.id,
@@ -282,6 +287,15 @@ export async function getDailyInspectionFormsForCalendar(startDate?: string, end
         ORDER BY f.date DESC, f.created_at DESC
       `
     }
+
+    console.log("Raw database result:", forms)
+    console.log("Number of forms found:", forms.length)
+
+    if (forms.length > 0) {
+      console.log("Sample form:", forms[0])
+    }
+
+    console.log("=== DATABASE ACTION DEBUG END ===")
 
     return {
       success: true,

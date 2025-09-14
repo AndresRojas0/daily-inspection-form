@@ -43,27 +43,50 @@ interface CalendarViewProps {
 }
 
 // Helper function to safely parse date strings without timezone issues
-function parseFormDate(dateString: string): string {
-  // If the date is already in YYYY-MM-DD format, return as-is
-  if (typeof dateString === "string" && dateString.match(/^\d{4}-\d{2}-\d{2}$/)) {
-    return dateString
-  }
-
-  // If it's a full datetime string, extract just the date part
-  if (typeof dateString === "string" && dateString.includes("T")) {
-    return dateString.split("T")[0]
-  }
-
-  // If it's some other format, try to parse it safely
+function parseFormDate(dateInput: any): string {
   try {
-    const date = new Date(dateString + "T00:00:00") // Force local time interpretation
-    const year = date.getFullYear()
-    const month = String(date.getMonth() + 1).padStart(2, "0")
-    const day = String(date.getDate()).padStart(2, "0")
-    return `${year}-${month}-${day}`
+    // Handle null, undefined, or empty values
+    if (!dateInput) {
+      console.error("Empty date input:", dateInput)
+      return ""
+    }
+
+    // If it's already in YYYY-MM-DD format, return as-is
+    if (typeof dateInput === "string" && dateInput.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return dateInput
+    }
+
+    // If it's a full datetime string, extract just the date part
+    if (typeof dateInput === "string" && dateInput.includes("T")) {
+      return dateInput.split("T")[0]
+    }
+
+    // Handle Date objects or date strings that need parsing
+    let date: Date
+    if (dateInput instanceof Date) {
+      date = dateInput
+    } else {
+      // Parse the date string - this handles formats like "Thu Sep 11 2025 00:00:00 GMT-0300"
+      date = new Date(dateInput)
+    }
+
+    // Check if the date is valid
+    if (isNaN(date.getTime())) {
+      console.error("Invalid date after parsing:", dateInput, "->", date)
+      return ""
+    }
+
+    // Format as YYYY-MM-DD using UTC to avoid timezone issues
+    const year = date.getUTCFullYear()
+    const month = String(date.getUTCMonth() + 1).padStart(2, "0")
+    const day = String(date.getUTCDate()).padStart(2, "0")
+
+    const result = `${year}-${month}-${day}`
+    console.log("Date parsing:", dateInput, "->", result)
+    return result
   } catch (error) {
-    console.error("Error parsing date:", dateString, error)
-    return dateString
+    console.error("Error parsing date:", dateInput, error)
+    return ""
   }
 }
 
@@ -99,6 +122,40 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
     console.log("Calendar View: Initial forms received:", forms.length, forms)
   }, [forms]) // Log initial forms and their count
 
+  // Get available years from forms
+  const availableYears = [
+    ...new Set(
+      forms
+        .map((form) => {
+          try {
+            const parsedDate = parseFormDate(form.date)
+            if (!parsedDate) return null
+
+            const year = Number.parseInt(parsedDate.split("-")[0])
+            return isNaN(year) ? null : year
+          } catch (error) {
+            console.error("Error parsing year from form date:", form.date, error)
+            return null
+          }
+        })
+        .filter((year): year is number => year !== null && !isNaN(year)),
+    ),
+  ].sort((a, b) => b - a) // Sort descending (newest first)
+
+  // If we have forms and current year has no forms, switch to the most recent year with forms
+  useEffect(() => {
+    if (availableYears.length > 0) {
+      const currentYear = currentDate.getFullYear()
+      const hasFormsInCurrentYear = availableYears.includes(currentYear)
+
+      if (!hasFormsInCurrentYear) {
+        // Switch to the most recent year that has forms
+        const mostRecentYearWithForms = availableYears[0]
+        setCurrentDate(new Date(mostRecentYearWithForms, currentDate.getMonth(), 1))
+      }
+    }
+  }, [availableYears, currentDate])
+
   // Group forms by date using the safe date parsing
   const formsByDate = forms.reduce(
     (acc, form) => {
@@ -114,12 +171,23 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
   )
 
   useEffect(() => {
-    if (selectedDate) {
-      console.log("Calendar View: Selected date changed to:", selectedDate)
-      console.log("Calendar View: Forms grouped by date object:", formsByDate) // Log the full formsByDate object
-      console.log("Calendar View: Forms for selected date from formsByDate:", formsByDate[selectedDate] || [])
-    }
-  }, [selectedDate, formsByDate]) // Include formsByDate in dependencies
+    console.log("=== CALENDAR DEBUG START ===")
+    console.log("Calendar View: Initial forms received:", forms.length)
+    console.log("Calendar View: Available years:", availableYears)
+    console.log("Calendar View: Current viewing year:", currentDate.getFullYear())
+
+    // Debug each form's date parsing
+    forms.slice(0, 5).forEach((form, index) => {
+      console.log(`Form ${index + 1} (ID: ${form.id}):`)
+      console.log(`  - Raw date: "${form.date}" (type: ${typeof form.date})`)
+      console.log(`  - Parsed date: "${parseFormDate(form.date)}"`)
+      console.log(`  - Inspector: ${form.inspector_name}`)
+      console.log(`  - Service checks: ${form.service_checks_count}`)
+    })
+
+    console.log("Calendar View: formsByDate keys:", Object.keys(formsByDate))
+    console.log("=== CALENDAR DEBUG END ===")
+  }, [forms, availableYears, currentDate])
 
   const handleDeleteClick = (form: CalendarForm) => {
     setFormToDelete(form)
@@ -229,6 +297,19 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
     setSelectedDate(null)
   }
 
+  const navigateYear = (direction: "prev" | "next") => {
+    setCurrentDate((prev) => {
+      const newDate = new Date(prev)
+      if (direction === "prev") {
+        newDate.setFullYear(newDate.getFullYear() - 1)
+      } else {
+        newDate.setFullYear(newDate.getFullYear() + 1)
+      }
+      return newDate
+    })
+    setSelectedDate(null)
+  }
+
   const goToToday = () => {
     const today = new Date()
     setCurrentDate(today)
@@ -239,6 +320,19 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
   }
 
   const selectedDateForms = selectedDate ? formsByDate[selectedDate] || [] : []
+
+  // Count forms in current viewing month/year
+  const formsInCurrentMonth = Object.keys(formsByDate).filter((dateString) => {
+    try {
+      if (!dateString || dateString === "") return false
+
+      const [formYear, formMonth] = dateString.split("-").map(Number)
+      return !isNaN(formYear) && !isNaN(formMonth) && formYear === year && formMonth === month + 1
+    } catch (error) {
+      console.error("Error parsing date for counting:", dateString, error)
+      return false
+    }
+  }).length
 
   return (
     <div className="space-y-6">
@@ -257,28 +351,24 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
       )}
 
       {/* Debug Info */}
-      {process.env.NODE_ENV === "development" && (
-        <Card className="border-yellow-200 bg-yellow-50">
-          <CardContent className="pt-4">
-            <p className="text-sm text-yellow-800">Debug: Total forms loaded (initialForms): {initialForms.length}</p>
-            <p className="text-sm text-yellow-800">Debug: Total forms in state: {forms.length}</p>
-            <p className="text-sm text-yellow-800">
-              Debug: Dates with forms (grouped): {Object.keys(formsByDate).join(", ") || "None"}
-            </p>
-            <p className="text-sm text-yellow-800">Debug: Currently selected date: {selectedDate || "None"}</p>
-            {selectedDate && (
-              <p className="text-sm text-yellow-800">Debug: Forms on selected date: {selectedDateForms.length}</p>
-            )}
-            <p className="text-sm text-yellow-800">
-              Debug: Sample form dates:{" "}
-              {forms
-                .slice(0, 3)
-                .map((f) => `ID:${f.id}=${parseFormDate(f.date)}`)
-                .join(", ")}
-            </p>
-          </CardContent>
-        </Card>
-      )}
+      <Card className="border-yellow-200 bg-yellow-50">
+        <CardContent className="pt-4">
+          <p className="text-sm text-yellow-800">Debug: Total forms loaded: {String(forms.length)}</p>
+          <p className="text-sm text-yellow-800">Debug: Available years: {availableYears.join(", ") || "None"}</p>
+          <p className="text-sm text-yellow-800">
+            Debug: Currently viewing: {monthNames[month]} {String(year)}
+          </p>
+          <p className="text-sm text-yellow-800">Debug: Forms in current month: {String(formsInCurrentMonth)}</p>
+          <p className="text-sm text-yellow-800">
+            Debug: Dates with forms: {Object.keys(formsByDate).slice(0, 10).join(", ") || "None"}
+            {Object.keys(formsByDate).length > 10 && ` ... and ${String(Object.keys(formsByDate).length - 10)} more`}
+          </p>
+          <p className="text-sm text-yellow-800">Debug: Currently selected date: {selectedDate || "None"}</p>
+          {selectedDate && (
+            <p className="text-sm text-yellow-800">Debug: Forms on selected date: {String(selectedDateForms.length)}</p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Calendar Header */}
       <Card>
@@ -292,18 +382,34 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
               <Button variant="outline" size="sm" onClick={goToToday}>
                 Today
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => navigateMonth("prev")}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <span className="font-medium min-w-[140px] text-center">
-                {monthNames[month]} {year}
-              </span>
-              <Button variant="ghost" size="sm" onClick={() => navigateMonth("next")}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
+
+              {/* Year Navigation */}
+              <div className="flex items-center gap-1 border rounded-md">
+                <Button variant="ghost" size="sm" onClick={() => navigateYear("prev")}>
+                  <ChevronLeft className="w-3 h-3" />
+                </Button>
+                <span className="px-2 text-sm font-medium min-w-[60px] text-center">{String(year)}</span>
+                <Button variant="ghost" size="sm" onClick={() => navigateYear("next")}>
+                  <ChevronRight className="w-3 h-3" />
+                </Button>
+              </div>
+
+              {/* Month Navigation */}
+              <div className="flex items-center gap-1 border rounded-md">
+                <Button variant="ghost" size="sm" onClick={() => navigateMonth("prev")}>
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+                <span className="px-3 font-medium min-w-[100px] text-center">{monthNames[month]}</span>
+                <Button variant="ghost" size="sm" onClick={() => navigateMonth("next")}>
+                  <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
-          <CardDescription>Click on any date to view inspection forms for that day</CardDescription>
+          <CardDescription>
+            Click on any date to view inspection forms for that day
+            {availableYears.length > 0 && <span className="ml-2">• Available years: {availableYears.join(", ")}</span>}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {/* Calendar Grid */}

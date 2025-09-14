@@ -5,13 +5,30 @@ import { ArrowLeft } from "lucide-react"
 import Link from "next/link"
 
 export default async function CalendarPage() {
-  // Get forms for the current year (you can adjust this range as needed)
-  const currentYear = new Date().getFullYear()
-  const startDate = `${currentYear}-01-01`
-  const endDate = `${currentYear}-12-31`
+  console.log("=== CALENDAR PAGE DEBUG ===")
+  console.log("Current year:", new Date().getFullYear())
 
-  const formsResult = await getDailyInspectionFormsForCalendar(startDate, endDate)
+  // Fetch ALL forms instead of limiting to current year
+  const formsResult = await getDailyInspectionFormsForCalendar()
+
+  console.log("Forms result:", formsResult)
+  console.log("Forms success:", formsResult.success)
+  console.log("Forms data length:", formsResult.success ? formsResult.data.length : 0)
+
   const forms = formsResult.success ? formsResult.data : []
+
+  // Log the years of the forms we found
+  if (forms.length > 0) {
+    const formYears = [...new Set(forms.map((form) => new Date(form.date + "T00:00:00").getFullYear()))]
+    console.log("Years with forms:", formYears.sort())
+    console.log(
+      "Sample form dates:",
+      forms.slice(0, 5).map((f) => ({ id: f.id, date: f.date })),
+    )
+  }
+
+  console.log("Final forms passed to CalendarView:", forms)
+  console.log("=== CALENDAR PAGE DEBUG END ===")
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -33,6 +50,30 @@ export default async function CalendarPage() {
           <Link href="/">
             <Button>New Inspection</Button>
           </Link>
+        </div>
+
+        {/* Debug Info Card */}
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <h3 className="font-semibold text-yellow-800 mb-2">Debug Information</h3>
+          <p className="text-sm text-yellow-700">Current year: {new Date().getFullYear()}</p>
+          <p className="text-sm text-yellow-700">Forms fetched: {forms.length}</p>
+          <p className="text-sm text-yellow-700">Query success: {formsResult.success ? "Yes" : "No"}</p>
+          {!formsResult.success && <p className="text-sm text-red-700">Error: {formsResult.message}</p>}
+          {forms.length > 0 && (
+            <>
+              <p className="text-sm text-yellow-700">
+                Years with forms:{" "}
+                {[...new Set(forms.map((form) => new Date(form.date + "T00:00:00").getFullYear()))].sort().join(", ")}
+              </p>
+              <p className="text-sm text-yellow-700">
+                Sample dates:{" "}
+                {forms
+                  .slice(0, 3)
+                  .map((f) => `${f.id}:${f.date}`)
+                  .join(", ")}
+              </p>
+            </>
+          )}
         </div>
 
         {/* Calendar Component */}
