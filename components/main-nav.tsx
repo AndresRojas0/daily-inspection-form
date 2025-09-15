@@ -62,6 +62,12 @@ export function MainNav() {
                     Debug DB
                   </Link>
                 </Button>
+                <Button variant="ghost" size="sm" asChild className="justify-start">
+                  <Link href="/debug-out-of-section">
+                    <Bug className="h-4 w-4 mr-2" />
+                    Debug OOS
+                  </Link>
+                </Button>
               </div>
             </SheetContent>
           </Sheet>
@@ -107,6 +113,12 @@ export function MainNav() {
               <Link href="/debug">
                 <Bug className="h-4 w-4 mr-2" />
                 Debug DB
+              </Link>
+            </Button>
+            <Button variant="ghost" size="sm" asChild>
+              <Link href="/debug-out-of-section">
+                <Bug className="h-4 w-4 mr-2" />
+                Debug OOS
               </Link>
             </Button>
           </div>
