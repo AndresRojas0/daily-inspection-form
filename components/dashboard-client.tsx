@@ -17,8 +17,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Calendar, FileText, Users, Clock, Trash2, CheckCircle, AlertCircle, LayoutDashboard } from "lucide-react"
+import { Plus, FileText, Users, Clock, CheckCircle, AlertCircle, LayoutDashboard, Ticket } from "lucide-react"
 import Link from "next/link"
+import type { OutOfSectionStats } from "@/lib/out-of-section-actions"
 
 interface DailyInspectionFormDB {
   id: number
@@ -40,8 +41,9 @@ interface InspectionStats {
 interface DashboardClientProps {
   initialForms: DailyInspectionFormDB[]
   initialStats: InspectionStats | null
-  topRoutes: { lineOrRouteNumber: string; count: number }[] // New prop
-  topStops: { addressOfStop: string; count: number }[] // New prop
+  topRoutes: { lineOrRouteNumber: string; count: number }[]
+  topStops: { addressOfStop: string; count: number }[]
+  oosStats: OutOfSectionStats | null
 }
 
 // Helper function to safely format dates without timezone issues
@@ -105,7 +107,7 @@ const formatDate = (dateInput: any, options?: Intl.DateTimeFormatOptions) => {
   }
 }
 
-export function DashboardClient({ initialForms, initialStats, topRoutes, topStops }: DashboardClientProps) {
+export function DashboardClient({ initialForms, initialStats, topRoutes, topStops, oosStats }: DashboardClientProps) {
   const [forms, setForms] = useState(initialForms)
   const [stats, setStats] = useState(initialStats)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -178,12 +180,20 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
               <p className="text-gray-600">Overview of your daily inspection forms</p>
             </div>
           </div>
-          <Link href="/">
-            <Button>
-              <Plus className="w-4 h-4 mr-2" />
-              New Inspection
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href="/">
+              <Button>
+                <Plus className="w-4 h-4 mr-2" />
+                New Inspection
+              </Button>
+            </Link>
+            <Link href="/out-of-section">
+              <Button variant="outline">
+                <Ticket className="w-4 h-4 mr-2" />
+                Out-of-Section
+              </Button>
+            </Link>
+          </div>
         </div>
 
         {/* Delete Result Alert */}
@@ -291,71 +301,113 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
           </Card>
         </div>
 
-        {/* Recent Forms Table/List */}
+        {/* Out-of-Section Statistics */}
         <Card>
           <CardHeader>
-            <CardTitle>Recent Inspection Forms</CardTitle>
-            <CardDescription>A list of your most recently submitted inspection forms.</CardDescription>
+            <CardTitle className="flex items-center gap-2">
+              <Ticket className="w-5 h-5 text-orange-600" />
+              Recent Out-Of-Section Tickets (Pasados) - Current Month
+            </CardTitle>
+            <CardDescription>Statistics for out-of-section tickets in the current month</CardDescription>
           </CardHeader>
           <CardContent>
-            {forms.length === 0 ? (
+            {!oosStats ? (
               <div className="text-center py-8 text-gray-500">
-                <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No inspection forms found.</p>
-                <Link href="/">
+                <Ticket className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                <p>No out-of-section data available for the current month.</p>
+                <Link href="/out-of-section">
                   <Button className="mt-4 bg-transparent" variant="outline">
-                    Create New Form
+                    Create Out-of-Section Form
                   </Button>
                 </Link>
               </div>
             ) : (
-              <div className="space-y-4">
-                {forms.map((form) => (
-                  <div
-                    key={form.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                  >
-                    <div className="space-y-1">
-                      <div className="font-medium flex items-center gap-2">
-                        <Users className="w-4 h-4 text-gray-500" />
-                        {form.inspector_name}
-                      </div>
-                      <div className="text-sm text-gray-600 flex items-center gap-2">
-                        <Calendar className="w-3 h-3" />
-                        <span>{formatDate(form.date)}</span>
-                        <span>•</span>
-                        <span>{form.place_of_work}</span>
-                      </div>
-                      <div className="text-xs text-gray-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        Created{" "}
-                        {new Date(form.created_at).toLocaleString("en-US", {
-                          timeZone: "America/Argentina/Buenos_Aires",
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Link href={`/dashboard/${form.id}`}>
-                        <Button variant="outline" size="sm">
-                          View Details
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteClick(form)}
-                        className="text-red-600 hover:text-red-800 hover:border-red-300"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
+              <div className="space-y-6">
+                {/* Summary Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="p-4 bg-blue-50 rounded-lg text-center">
+                    <p className="text-sm text-blue-600">Total Forms</p>
+                    <p className="text-2xl font-bold text-blue-900">{oosStats.totalForms}</p>
                   </div>
-                ))}
+                  <div className="p-4 bg-green-50 rounded-lg text-center">
+                    <p className="text-sm text-green-600">Total Passengers</p>
+                    <p className="text-2xl font-bold text-green-900">{oosStats.totalPassengers}</p>
+                  </div>
+                  <div className="p-4 bg-purple-50 rounded-lg text-center">
+                    <p className="text-sm text-purple-600">Total Passes</p>
+                    <p className="text-2xl font-bold text-purple-900">{oosStats.totalPasses}</p>
+                  </div>
+                  <div className="p-4 bg-red-50 rounded-lg text-center">
+                    <p className="text-sm text-red-600">Total Out-of-Section</p>
+                    <p className="text-2xl font-bold text-red-900">{oosStats.totalOOS}</p>
+                  </div>
+                </div>
+
+                {/* Statistics by Category */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* By Place of Work */}
+                  <div>
+                    <h4 className="font-semibold mb-3 text-gray-700">By Place of Work</h4>
+                    {oosStats.byPlaceOfWork.length === 0 ? (
+                      <p className="text-sm text-gray-500">No data available</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {oosStats.byPlaceOfWork.map((item, index) => (
+                          <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                            <p className="font-medium text-sm">{item.place}</p>
+                            <div className="flex justify-between text-xs text-gray-600 mt-1">
+                              <span>P: {item.passengers}</span>
+                              <span>Passes: {item.passes}</span>
+                              <span>OOS: {item.oos}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* By Line Route */}
+                  <div>
+                    <h4 className="font-semibold mb-3 text-gray-700">By Line Route</h4>
+                    {oosStats.byLineRoute.length === 0 ? (
+                      <p className="text-sm text-gray-500">No data available</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {oosStats.byLineRoute.map((item, index) => (
+                          <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                            <p className="font-medium text-sm">{item.route}</p>
+                            <div className="flex justify-between text-xs text-gray-600 mt-1">
+                              <span>P: {item.passengers}</span>
+                              <span>Passes: {item.passes}</span>
+                              <span>OOS: {item.oos}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* By Route Branch */}
+                  <div>
+                    <h4 className="font-semibold mb-3 text-gray-700">By Route Branch</h4>
+                    {oosStats.byRouteBranch.length === 0 ? (
+                      <p className="text-sm text-gray-500">No data available</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {oosStats.byRouteBranch.map((item, index) => (
+                          <div key={index} className="p-3 bg-gray-50 rounded-lg">
+                            <p className="font-medium text-sm">{item.branch}</p>
+                            <div className="flex justify-between text-xs text-gray-600 mt-1">
+                              <span>P: {item.passengers}</span>
+                              <span>Passes: {item.passes}</span>
+                              <span>OOS: {item.oos}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
           </CardContent>

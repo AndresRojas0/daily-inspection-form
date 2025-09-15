@@ -40,6 +40,32 @@ export interface OutOfSectionFormWithChecks extends OutOfSectionFormDB {
   service_checks: OutOfSectionServiceCheckDB[]
 }
 
+// Interface for statistics
+export interface OutOfSectionStats {
+  totalForms: number
+  totalPassengers: number
+  totalPasses: number
+  totalOOS: number
+  byPlaceOfWork: {
+    place: string
+    passengers: number
+    passes: number
+    oos: number
+  }[]
+  byLineRoute: {
+    route: string
+    passengers: number
+    passes: number
+    oos: number
+  }[]
+  byRouteBranch: {
+    branch: string
+    passengers: number
+    passes: number
+    oos: number
+  }[]
+}
+
 // Interface for the form data from the frontend
 interface ServiceCheckInput {
   serviceCode: string
@@ -328,6 +354,73 @@ export async function getOutOfSectionForms(limit = 50, offset = 0) {
   }
 }
 
+export async function getOutOfSectionFormsForCalendar(startDate?: string, endDate?: string) {
+  try {
+    console.log("=== OUT-OF-SECTION CALENDAR DEBUG ===")
+    console.log("getOutOfSectionFormsForCalendar called with:", { startDate, endDate })
+
+    let forms
+
+    if (startDate && endDate) {
+      console.log("Using date range query")
+      forms = await sql`
+        SELECT 
+          f.id,
+          f.inspector_name,
+          f.date,
+          f.place_of_work,
+          f.line_or_route_number,
+          f.direction,
+          f.created_at,
+          COUNT(s.id)::integer as service_checks_count
+        FROM out_of_section_forms f
+        LEFT JOIN out_of_section_service_checks s ON f.id = s.form_id
+        WHERE f.date >= ${startDate} AND f.date <= ${endDate}
+        GROUP BY f.id, f.inspector_name, f.date, f.place_of_work, f.line_or_route_number, f.direction, f.created_at
+        ORDER BY f.date DESC, f.created_at DESC
+      `
+    } else {
+      console.log("Using query without date range")
+      forms = await sql`
+        SELECT 
+          f.id,
+          f.inspector_name,
+          f.date,
+          f.place_of_work,
+          f.line_or_route_number,
+          f.direction,
+          f.created_at,
+          COUNT(s.id)::integer as service_checks_count
+        FROM out_of_section_forms f
+        LEFT JOIN out_of_section_service_checks s ON f.id = s.form_id
+        GROUP BY f.id, f.inspector_name, f.date, f.place_of_work, f.line_or_route_number, f.direction, f.created_at
+        ORDER BY f.date DESC, f.created_at DESC
+      `
+    }
+
+    console.log("Raw database result:", forms)
+    console.log("Number of out-of-section forms found:", forms.length)
+
+    if (forms.length > 0) {
+      console.log("Sample out-of-section form:", forms[0])
+    }
+
+    console.log("=== OUT-OF-SECTION CALENDAR DEBUG END ===")
+
+    return {
+      success: true,
+      data: forms,
+    }
+  } catch (error) {
+    console.error("Error fetching out-of-section forms for calendar:", error)
+    return {
+      success: false,
+      message: "Failed to fetch out-of-section forms",
+      data: [],
+    }
+  }
+}
+
 export async function getOutOfSectionFormById(id: number) {
   try {
     const [form] = (await sql`
@@ -383,6 +476,108 @@ export async function deleteOutOfSectionForm(id: number) {
     return {
       success: false,
       message: "Failed to delete out-of-section form",
+    }
+  }
+}
+
+export async function getOutOfSectionStats() {
+  try {
+    // Get total forms for current month
+    const [totalForms] = await sql`
+      SELECT COUNT(*) as count FROM out_of_section_forms
+      WHERE date >= DATE_TRUNC('month', CURRENT_DATE)
+    `
+
+    // Get aggregated statistics for current month
+    const [totals] = await sql`
+      SELECT 
+        COALESCE(SUM(f.total_of_passengers), 0) as total_passengers,
+        COALESCE(SUM(f.total_of_passes), 0) as total_passes,
+        COALESCE(SUM(f.total_of_oos), 0) as total_oos
+      FROM out_of_section_forms f
+      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+    `
+
+    // Get statistics by place of work
+    const byPlaceOfWork = await sql`
+      SELECT 
+        f.place_of_work as place,
+        COALESCE(SUM(f.total_of_passengers), 0) as passengers,
+        COALESCE(SUM(f.total_of_passes), 0) as passes,
+        COALESCE(SUM(f.total_of_oos), 0) as oos
+      FROM out_of_section_forms f
+      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+      GROUP BY f.place_of_work
+      ORDER BY passengers DESC
+      LIMIT 10
+    `
+
+    // Get statistics by line route
+    const byLineRoute = await sql`
+      SELECT 
+        f.line_or_route_number as route,
+        COALESCE(SUM(f.total_of_passengers), 0) as passengers,
+        COALESCE(SUM(f.total_of_passes), 0) as passes,
+        COALESCE(SUM(f.total_of_oos), 0) as oos
+      FROM out_of_section_forms f
+      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+      GROUP BY f.line_or_route_number
+      ORDER BY passengers DESC
+      LIMIT 10
+    `
+
+    // Get statistics by route branch (from service checks)
+    const byRouteBranch = await sql`
+      SELECT 
+        s.line_route_branch as branch,
+        COALESCE(SUM(s.passengers_on_board), 0) as passengers,
+        COALESCE(SUM(s.passes_used), 0) as passes,
+        COALESCE(SUM(s.out_of_section_tickets), 0) as oos
+      FROM out_of_section_service_checks s
+      INNER JOIN out_of_section_forms f ON s.form_id = f.id
+      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+        AND s.line_route_branch IS NOT NULL 
+        AND s.line_route_branch != ''
+      GROUP BY s.line_route_branch
+      ORDER BY passengers DESC
+      LIMIT 10
+    `
+
+    const stats: OutOfSectionStats = {
+      totalForms: Number.parseInt(totalForms.count),
+      totalPassengers: Number.parseInt(totals.total_passengers),
+      totalPasses: Number.parseInt(totals.total_passes),
+      totalOOS: Number.parseInt(totals.total_oos),
+      byPlaceOfWork: byPlaceOfWork.map((row) => ({
+        place: row.place,
+        passengers: Number.parseInt(row.passengers),
+        passes: Number.parseInt(row.passes),
+        oos: Number.parseInt(row.oos),
+      })),
+      byLineRoute: byLineRoute.map((row) => ({
+        route: row.route,
+        passengers: Number.parseInt(row.passengers),
+        passes: Number.parseInt(row.passes),
+        oos: Number.parseInt(row.oos),
+      })),
+      byRouteBranch: byRouteBranch.map((row) => ({
+        branch: row.branch,
+        passengers: Number.parseInt(row.passengers),
+        passes: Number.parseInt(row.passes),
+        oos: Number.parseInt(row.oos),
+      })),
+    }
+
+    return {
+      success: true,
+      data: stats,
+    }
+  } catch (error) {
+    console.error("Error fetching out-of-section statistics:", error)
+    return {
+      success: false,
+      message: "Failed to fetch out-of-section statistics",
+      data: null,
     }
   }
 }

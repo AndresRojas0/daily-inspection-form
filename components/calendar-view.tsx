@@ -25,9 +25,11 @@ import {
   Trash2,
   CheckCircle,
   AlertCircle,
+  Ticket,
 } from "lucide-react"
 import Link from "next/link"
 import { deleteDailyInspectionForm } from "@/lib/actions"
+import { deleteOutOfSectionForm } from "@/lib/out-of-section-actions"
 
 interface CalendarForm {
   id: number
@@ -38,8 +40,20 @@ interface CalendarForm {
   created_at: string
 }
 
+interface CalendarOOSForm {
+  id: number
+  inspector_name: string
+  date: string
+  place_of_work: string
+  line_or_route_number: string
+  direction: string
+  service_checks_count: number
+  created_at: string
+}
+
 interface CalendarViewProps {
   forms: CalendarForm[]
+  oosForms: CalendarOOSForm[]
 }
 
 // Helper function to safely parse date strings without timezone issues
@@ -109,37 +123,51 @@ function formatDateForDisplay(dateString: string): string {
   }
 }
 
-export function CalendarView({ forms: initialForms }: CalendarViewProps) {
+export function CalendarView({ forms: initialForms, oosForms: initialOOSForms }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [forms, setForms] = useState(initialForms)
+  const [oosForms, setOOSForms] = useState(initialOOSForms)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [formToDelete, setFormToDelete] = useState<CalendarForm | null>(null)
+  const [formToDelete, setFormToDelete] = useState<any | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteResult, setDeleteResult] = useState<{ success: boolean; message: string } | null>(null)
 
   useEffect(() => {
     console.log("Calendar View: Initial forms received:", forms.length, forms)
-  }, [forms]) // Log initial forms and their count
+    console.log("Calendar View: Initial OOS forms received:", oosForms.length, oosForms)
+  }, [forms, oosForms])
 
-  // Get available years from forms
+  // Get available years from both types of forms
   const availableYears = [
-    ...new Set(
-      forms
+    ...new Set([
+      ...forms
         .map((form) => {
           try {
             const parsedDate = parseFormDate(form.date)
             if (!parsedDate) return null
-
             const year = Number.parseInt(parsedDate.split("-")[0])
             return isNaN(year) ? null : year
           } catch (error) {
-            console.error("Error parsing year from form date:", form.date, error)
+            console.error("Error parsing year from daily form date:", form.date, error)
             return null
           }
         })
         .filter((year): year is number => year !== null && !isNaN(year)),
-    ),
+      ...oosForms
+        .map((form) => {
+          try {
+            const parsedDate = parseFormDate(form.date)
+            if (!parsedDate) return null
+            const year = Number.parseInt(parsedDate.split("-")[0])
+            return isNaN(year) ? null : year
+          } catch (error) {
+            console.error("Error parsing year from OOS form date:", form.date, error)
+            return null
+          }
+        })
+        .filter((year): year is number => year !== null && !isNaN(year)),
+    ]),
   ].sort((a, b) => b - a) // Sort descending (newest first)
 
   // If we have forms and current year has no forms, switch to the most recent year with forms
@@ -160,7 +188,6 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
   const formsByDate = forms.reduce(
     (acc, form) => {
       const dateString = parseFormDate(form.date)
-
       if (!acc[dateString]) {
         acc[dateString] = []
       }
@@ -170,27 +197,21 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
     {} as Record<string, CalendarForm[]>,
   )
 
-  useEffect(() => {
-    console.log("=== CALENDAR DEBUG START ===")
-    console.log("Calendar View: Initial forms received:", forms.length)
-    console.log("Calendar View: Available years:", availableYears)
-    console.log("Calendar View: Current viewing year:", currentDate.getFullYear())
+  // Group OOS forms by date
+  const oosFormsByDate = oosForms.reduce(
+    (acc, form) => {
+      const dateString = parseFormDate(form.date)
+      if (!acc[dateString]) {
+        acc[dateString] = []
+      }
+      acc[dateString].push(form)
+      return acc
+    },
+    {} as Record<string, CalendarOOSForm[]>,
+  )
 
-    // Debug each form's date parsing
-    forms.slice(0, 5).forEach((form, index) => {
-      console.log(`Form ${index + 1} (ID: ${form.id}):`)
-      console.log(`  - Raw date: "${form.date}" (type: ${typeof form.date})`)
-      console.log(`  - Parsed date: "${parseFormDate(form.date)}"`)
-      console.log(`  - Inspector: ${form.inspector_name}`)
-      console.log(`  - Service checks: ${form.service_checks_count}`)
-    })
-
-    console.log("Calendar View: formsByDate keys:", Object.keys(formsByDate))
-    console.log("=== CALENDAR DEBUG END ===")
-  }, [forms, availableYears, currentDate])
-
-  const handleDeleteClick = (form: CalendarForm) => {
-    setFormToDelete(form)
+  const handleDeleteClick = (form: any, formType: "daily" | "oos") => {
+    setFormToDelete({ ...form, formType })
     setDeleteDialogOpen(true)
   }
 
@@ -201,24 +222,30 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
     setDeleteResult(null)
 
     try {
-      // Call the server action to delete the form
-      const result = await deleteDailyInspectionForm(formToDelete.id)
-      setDeleteResult(result) // Set result from server action
+      let result
+      if (formToDelete.formType === "daily") {
+        result = await deleteDailyInspectionForm(formToDelete.id)
+        if (result.success) {
+          setForms((prevForms) => prevForms.filter((form) => form.id !== formToDelete.id))
+        }
+      } else {
+        result = await deleteOutOfSectionForm(formToDelete.id)
+        if (result.success) {
+          setOOSForms((prevForms) => prevForms.filter((form) => form.id !== formToDelete.id))
+        }
+      }
+
+      setDeleteResult(result)
 
       if (result.success) {
-        // Remove the deleted form from the local state
-        setForms((prevForms) => prevForms.filter((form) => form.id !== formToDelete.id))
-
-        // Close dialog after a short delay
         setTimeout(() => {
           setDeleteDialogOpen(false)
           setFormToDelete(null)
-          setDeleteResult(null) // Clear result after successful deletion message fades
+          setDeleteResult(null)
         }, 1500)
       }
     } catch (error) {
-      // This catch block handles unexpected network errors or issues *before* the action returns
-      console.error("Client-side error calling deleteDailyInspectionForm:", error)
+      console.error("Client-side error calling delete function:", error)
       setDeleteResult({
         success: false,
         message: "An unexpected client-side error occurred. Check browser console.",
@@ -256,6 +283,7 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
     const isToday = dateString === todayString
 
     const dayForms = formsByDate[dateString] || []
+    const dayOOSForms = oosFormsByDate[dateString] || []
 
     calendarDays.push({
       date: new Date(currentCalendarDate),
@@ -263,7 +291,10 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
       isCurrentMonth,
       isToday,
       forms: dayForms,
+      oosForms: dayOOSForms,
       formCount: dayForms.length,
+      oosFormCount: dayOOSForms.length,
+      totalCount: dayForms.length + dayOOSForms.length,
     })
 
     currentCalendarDate.setDate(currentCalendarDate.getDate() + 1)
@@ -320,12 +351,23 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
   }
 
   const selectedDateForms = selectedDate ? formsByDate[selectedDate] || [] : []
+  const selectedDateOOSForms = selectedDate ? oosFormsByDate[selectedDate] || [] : []
 
   // Count forms in current viewing month/year
   const formsInCurrentMonth = Object.keys(formsByDate).filter((dateString) => {
     try {
       if (!dateString || dateString === "") return false
+      const [formYear, formMonth] = dateString.split("-").map(Number)
+      return !isNaN(formYear) && !isNaN(formMonth) && formYear === year && formMonth === month + 1
+    } catch (error) {
+      console.error("Error parsing date for counting:", dateString, error)
+      return false
+    }
+  }).length
 
+  const oosFormsInCurrentMonth = Object.keys(oosFormsByDate).filter((dateString) => {
+    try {
+      if (!dateString || dateString === "") return false
       const [formYear, formMonth] = dateString.split("-").map(Number)
       return !isNaN(formYear) && !isNaN(formMonth) && formYear === year && formMonth === month + 1
     } catch (error) {
@@ -353,19 +395,24 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
       {/* Debug Info */}
       <Card className="border-yellow-200 bg-yellow-50">
         <CardContent className="pt-4">
-          <p className="text-sm text-yellow-800">Debug: Total forms loaded: {String(forms.length)}</p>
+          <p className="text-sm text-yellow-800">Debug: Total daily forms loaded: {String(forms.length)}</p>
+          <p className="text-sm text-yellow-800">Debug: Total OOS forms loaded: {String(oosForms.length)}</p>
           <p className="text-sm text-yellow-800">Debug: Available years: {availableYears.join(", ") || "None"}</p>
           <p className="text-sm text-yellow-800">
             Debug: Currently viewing: {monthNames[month]} {String(year)}
           </p>
-          <p className="text-sm text-yellow-800">Debug: Forms in current month: {String(formsInCurrentMonth)}</p>
-          <p className="text-sm text-yellow-800">
-            Debug: Dates with forms: {Object.keys(formsByDate).slice(0, 10).join(", ") || "None"}
-            {Object.keys(formsByDate).length > 10 && ` ... and ${String(Object.keys(formsByDate).length - 10)} more`}
-          </p>
+          <p className="text-sm text-yellow-800">Debug: Daily forms in current month: {String(formsInCurrentMonth)}</p>
+          <p className="text-sm text-yellow-800">Debug: OOS forms in current month: {String(oosFormsInCurrentMonth)}</p>
           <p className="text-sm text-yellow-800">Debug: Currently selected date: {selectedDate || "None"}</p>
           {selectedDate && (
-            <p className="text-sm text-yellow-800">Debug: Forms on selected date: {String(selectedDateForms.length)}</p>
+            <>
+              <p className="text-sm text-yellow-800">
+                Debug: Daily forms on selected date: {String(selectedDateForms.length)}
+              </p>
+              <p className="text-sm text-yellow-800">
+                Debug: OOS forms on selected date: {String(selectedDateOOSForms.length)}
+              </p>
+            </>
           )}
         </CardContent>
       </Card>
@@ -427,19 +474,28 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
                 key={index}
                 onClick={() => setSelectedDate(day.dateString)}
                 className={`
-                  relative p-2 h-16 text-left border rounded-lg transition-colors
+                  relative p-2 h-20 text-left border rounded-lg transition-colors
                   ${!day.isCurrentMonth ? "text-gray-300 bg-gray-50" : ""}
                   ${day.isToday ? "border-blue-500 bg-blue-50" : "border-gray-200"}
                   ${selectedDate === day.dateString ? "border-blue-600 bg-blue-100" : ""}
-                  ${day.formCount > 0 ? "hover:bg-green-50" : "hover:bg-gray-50"}
+                  ${day.totalCount > 0 ? "hover:bg-green-50" : "hover:bg-gray-50"}
                 `}
               >
                 <div className="text-sm font-medium">{day.date.getDate()}</div>
-                {day.formCount > 0 && (
-                  <div className="absolute bottom-1 right-1">
-                    <Badge variant="secondary" className="text-xs px-1 py-0 bg-green-100 text-green-800">
-                      {day.formCount}
-                    </Badge>
+                {day.totalCount > 0 && (
+                  <div className="absolute bottom-1 right-1 flex flex-col gap-1">
+                    {day.formCount > 0 && (
+                      <Badge variant="secondary" className="text-xs px-1 py-0 bg-green-100 text-green-800">
+                        <FileText className="w-2 h-2 mr-1" />
+                        {day.formCount}
+                      </Badge>
+                    )}
+                    {day.oosFormCount > 0 && (
+                      <Badge variant="secondary" className="text-xs px-1 py-0 bg-orange-100 text-orange-800">
+                        <Ticket className="w-2 h-2 mr-1" />
+                        {day.oosFormCount}
+                      </Badge>
+                    )}
                   </div>
                 )}
                 {day.isToday && <div className="absolute top-1 left-1 w-2 h-2 bg-blue-500 rounded-full"></div>}
@@ -455,9 +511,15 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
             </div>
             <div className="flex items-center gap-1">
               <Badge variant="secondary" className="text-xs px-1 py-0 bg-green-100 text-green-800">
-                N
+                <FileText className="w-2 h-2 mr-1" />N
               </Badge>
-              <span>Forms count</span>
+              <span>Daily Inspections</span>
+            </div>
+            <div className="flex items-center gap-1">
+              <Badge variant="secondary" className="text-xs px-1 py-0 bg-orange-100 text-orange-800">
+                <Ticket className="w-2 h-2 mr-1" />N
+              </Badge>
+              <span>Out-of-Section</span>
             </div>
           </div>
         </CardContent>
@@ -472,73 +534,154 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
               Forms for {formatDateForDisplay(selectedDate)}
             </CardTitle>
             <CardDescription>
-              {selectedDateForms.length === 0
-                ? "No inspection forms found for this date"
-                : `${selectedDateForms.length} inspection form${selectedDateForms.length > 1 ? "s" : ""} found`}
+              {selectedDateForms.length + selectedDateOOSForms.length === 0
+                ? "No forms found for this date"
+                : `${selectedDateForms.length} daily inspection form${selectedDateForms.length !== 1 ? "s" : ""} and ${selectedDateOOSForms.length} out-of-section form${selectedDateOOSForms.length !== 1 ? "s" : ""} found`}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {selectedDateForms.length === 0 ? (
+            {selectedDateForms.length === 0 && selectedDateOOSForms.length === 0 ? (
               <div className="text-center py-8 text-gray-500">
                 <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No inspection forms for this date.</p>
-                <Link href="/">
-                  <Button className="mt-4 bg-transparent" variant="outline">
-                    Create New Form
-                  </Button>
-                </Link>
+                <p>No forms for this date.</p>
+                <div className="flex gap-2 justify-center mt-4">
+                  <Link href="/">
+                    <Button className="bg-transparent" variant="outline">
+                      Create Daily Inspection
+                    </Button>
+                  </Link>
+                  <Link href="/out-of-section">
+                    <Button className="bg-transparent" variant="outline">
+                      Create Out-of-Section
+                    </Button>
+                  </Link>
+                </div>
               </div>
             ) : (
-              <div className="space-y-4">
-                {selectedDateForms.map((form) => (
-                  <div
-                    key={form.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                  >
-                    <div className="space-y-1">
-                      <div className="font-medium flex items-center gap-2">
-                        <Users className="w-4 h-4 text-gray-500" />
-                        {form.inspector_name}
-                      </div>
-                      <div className="text-sm text-gray-600 flex items-center gap-2">
-                        <span>{form.place_of_work}</span>
-                        <span>•</span>
-                        <span className="flex items-center gap-1">
-                          <FileText className="w-3 h-3" />
-                          {form.service_checks_count} checks
-                        </span>
-                      </div>
-                      <div className="text-xs text-gray-400 flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        Created{" "}
-                        {new Date(form.created_at).toLocaleString("en-US", {
-                          timeZone: "America/Argentina/Buenos_Aires",
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline">{form.service_checks_count} checks</Badge>
-                      <Link href={`/dashboard/${form.id}`}>
-                        <Button variant="outline" size="sm">
-                          View Details
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteClick(form)}
-                        className="text-red-600 hover:text-red-800 hover:border-red-300"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+              <div className="space-y-6">
+                {/* Daily Inspection Forms */}
+                {selectedDateForms.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-green-600" />
+                      Daily Inspection Forms ({selectedDateForms.length})
+                    </h3>
+                    <div className="space-y-3">
+                      {selectedDateForms.map((form) => (
+                        <div
+                          key={form.id}
+                          className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
+                        >
+                          <div className="space-y-1">
+                            <div className="font-medium flex items-center gap-2">
+                              <Users className="w-4 h-4 text-gray-500" />
+                              {form.inspector_name}
+                            </div>
+                            <div className="text-sm text-gray-600 flex items-center gap-2">
+                              <span>{form.place_of_work}</span>
+                              <span>•</span>
+                              <span className="flex items-center gap-1">
+                                <FileText className="w-3 h-3" />
+                                {form.service_checks_count} checks
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-400 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Created{" "}
+                              {new Date(form.created_at).toLocaleString("en-US", {
+                                timeZone: "America/Argentina/Buenos_Aires",
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline">{form.service_checks_count} checks</Badge>
+                            <Link href={`/dashboard/${form.id}`}>
+                              <Button variant="outline" size="sm">
+                                View Details
+                              </Button>
+                            </Link>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteClick(form, "daily")}
+                              className="text-red-600 hover:text-red-800 hover:border-red-300"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
+
+                {/* Out-of-Section Forms */}
+                {selectedDateOOSForms.length > 0 && (
+                  <div>
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <Ticket className="w-4 h-4 text-orange-600" />
+                      Out-of-Section Forms ({selectedDateOOSForms.length})
+                    </h3>
+                    <div className="space-y-3">
+                      {selectedDateOOSForms.map((form) => (
+                        <div
+                          key={form.id}
+                          className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 border-l-4 border-l-orange-500"
+                        >
+                          <div className="space-y-1">
+                            <div className="font-medium flex items-center gap-2">
+                              <Users className="w-4 h-4 text-gray-500" />
+                              {form.inspector_name}
+                            </div>
+                            <div className="text-sm text-gray-600 flex items-center gap-2">
+                              <span>{form.place_of_work}</span>
+                              <span>•</span>
+                              <span>{form.line_or_route_number}</span>
+                              <span>•</span>
+                              <span>{form.direction}</span>
+                            </div>
+                            <div className="text-sm text-gray-600 flex items-center gap-2">
+                              <span className="flex items-center gap-1">
+                                <Ticket className="w-3 h-3" />
+                                {form.service_checks_count} services
+                              </span>
+                            </div>
+                            <div className="text-xs text-gray-400 flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              Created{" "}
+                              {new Date(form.created_at).toLocaleString("en-US", {
+                                timeZone: "America/Argentina/Buenos_Aires",
+                                year: "numeric",
+                                month: "short",
+                                day: "numeric",
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                              {form.service_checks_count} services
+                            </Badge>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDeleteClick(form, "oos")}
+                              className="text-red-600 hover:text-red-800 hover:border-red-300"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
@@ -549,14 +692,24 @@ export function CalendarView({ forms: initialForms }: CalendarViewProps) {
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent key={isDeleting ? "deleting-dialog" : "not-deleting-dialog"}>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Inspection Form</AlertDialogTitle>
-            <AlertDialogDescription>Are you sure you want to delete this inspection form?</AlertDialogDescription>
+            <AlertDialogTitle>
+              Delete {formToDelete?.formType === "daily" ? "Daily Inspection" : "Out-of-Section"} Form
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this{" "}
+              {formToDelete?.formType === "daily" ? "daily inspection" : "out-of-section"} form?
+            </AlertDialogDescription>
           </AlertDialogHeader>
 
           {formToDelete && (
             <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm">
               <p className="font-medium">{formToDelete.inspector_name}</p>
               <p className="text-gray-600">{formToDelete.place_of_work}</p>
+              {formToDelete.formType === "oos" && (
+                <p className="text-gray-600">
+                  {formToDelete.line_or_route_number} • {formToDelete.direction}
+                </p>
+              )}
               <p className="text-gray-600">Date: {formatDateForDisplay(parseFormDate(formToDelete.date))}</p>
             </div>
           )}
