@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Users, CheckCircle, AlertCircle, FileSpreadsheet } from "lucide-react"
+import { OutOfSectionExcelUpload } from "@/components/out-of-section-excel-upload"
 
 interface ServiceCheck {
   id: string
@@ -67,10 +68,13 @@ export default function OutOfSectionApp() {
 
   // Calculate totals automatically
   const calculateTotals = (serviceChecks: ServiceCheck[]) => {
-    const totalOfServices = serviceChecks.length
-    const totalOfPassengers = serviceChecks.reduce((sum, check) => sum + check.passengersOnBoard, 0)
-    const totalOfOOS = serviceChecks.reduce((sum, check) => sum + check.outOfSectionTickets, 0)
-    const totalOfPasses = serviceChecks.reduce((sum, check) => sum + check.passesUsed, 0)
+    // Only count rows with filled service codes
+    const filledServiceChecks = serviceChecks.filter((check) => check.serviceCode && check.serviceCode.trim() !== "")
+
+    const totalOfServices = filledServiceChecks.length
+    const totalOfPassengers = filledServiceChecks.reduce((sum, check) => sum + check.passengersOnBoard, 0)
+    const totalOfOOS = filledServiceChecks.reduce((sum, check) => sum + check.outOfSectionTickets, 0)
+    const totalOfPasses = filledServiceChecks.reduce((sum, check) => sum + check.passesUsed, 0)
 
     return {
       totalOfServices,
@@ -102,6 +106,40 @@ export default function OutOfSectionApp() {
       ...prev,
       serviceChecks: newServiceChecks,
     }))
+  }
+
+  const handleExcelDataLoaded = (data: any) => {
+    // Pad with empty rows to reach 50 total rows
+    const paddedServiceChecks = [...data.serviceChecks]
+    while (paddedServiceChecks.length < 50) {
+      paddedServiceChecks.push({
+        id: `empty-${Date.now()}-${paddedServiceChecks.length}`,
+        serviceCode: "",
+        lineRouteBranch: "",
+        exactHourOfSchedule: "",
+        gpsStatus: {
+          minutes: 0,
+          seconds: 0,
+          status: "on-time",
+        },
+        passengersOnBoard: 0,
+        outOfSectionTickets: 0,
+        passesUsed: 0,
+        observations: "",
+      })
+    }
+
+    setForm({
+      formHeader: {
+        ...data.formHeader,
+        inspectorName: form.formHeader.inspectorName, // Keep existing inspector name
+      },
+      serviceChecks: paddedServiceChecks,
+    })
+    setSubmitResult({
+      success: true,
+      message: `Successfully loaded ${data.serviceChecks.length} service checks from Excel file`,
+    })
   }
 
   const updateServiceCheck = (id: string, field: string, value: any) => {
@@ -542,6 +580,11 @@ export default function OutOfSectionApp() {
             </p>
           </CardContent>
         </Card>
+
+        {/* Excel Upload Modal */}
+        {showExcelUpload && (
+          <OutOfSectionExcelUpload onDataLoaded={handleExcelDataLoaded} onClose={() => setShowExcelUpload(false)} />
+        )}
       </div>
     </div>
   )
