@@ -20,7 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, Users, CheckCircle, AlertCircle, FileSpreadsheet, Trash2, Edit, Save, X } from "lucide-react"
+import { Plus, Users, CheckCircle, AlertCircle, FileSpreadsheet, Trash2, FileText, X, Save } from "lucide-react"
 import { OutOfSectionExcelUpload } from "@/components/out-of-section-excel-upload"
 import {
   saveOutOfSectionForm,
@@ -311,69 +311,6 @@ export default function OutOfSectionApp() {
     }
   }
 
-  const handleEdit = (savedForm: any) => {
-    // Convert saved form to working form format
-    const workingForm: OutOfSectionForm = {
-      id: savedForm.id,
-      tempId: `edit-${savedForm.id}-${Date.now()}`,
-      isEditing: true,
-      formHeader: {
-        title: savedForm.title,
-        inspectorName: savedForm.inspector_name,
-        date: savedForm.date,
-        placeOfWork: savedForm.place_of_work,
-        lineOrRouteNumber: savedForm.line_or_route_number,
-        direction: savedForm.direction,
-        totalOfServices: savedForm.total_of_services,
-        totalOfPassengers: savedForm.total_of_passengers,
-        totalOfOOS: savedForm.total_of_oos,
-        totalOfPasses: savedForm.total_of_passes,
-      },
-      serviceChecks: [], // Will be populated with 50 rows
-    }
-
-    // Create 50 rows, filling with existing data where available
-    const serviceChecks: ServiceCheck[] = Array.from({ length: 50 }, (_, index) => {
-      const existingCheck = savedForm.service_checks?.[index]
-      if (existingCheck) {
-        return {
-          id: `edit-${existingCheck.id}`,
-          serviceCode: existingCheck.service_code,
-          lineRouteBranch: existingCheck.line_route_branch,
-          exactHourOfSchedule: existingCheck.exact_hour_of_schedule,
-          gpsStatus: {
-            minutes: existingCheck.gps_minutes,
-            seconds: existingCheck.gps_seconds,
-            status: existingCheck.gps_status,
-          },
-          passengersOnBoard: existingCheck.passengers_on_board,
-          outOfSectionTickets: existingCheck.out_of_section_tickets,
-          passesUsed: existingCheck.passes_used,
-          observations: existingCheck.observations || "",
-        }
-      } else {
-        return {
-          id: `empty-${Date.now()}-${index}`,
-          serviceCode: "",
-          lineRouteBranch: "",
-          exactHourOfSchedule: "",
-          gpsStatus: {
-            minutes: 0,
-            seconds: 0,
-            status: "on-time",
-          },
-          passengersOnBoard: 0,
-          outOfSectionTickets: 0,
-          passesUsed: 0,
-          observations: "",
-        }
-      }
-    })
-
-    workingForm.serviceChecks = serviceChecks
-    setForms((prev) => [...prev, workingForm])
-  }
-
   const handleDeleteClick = (form: any) => {
     setFormToDelete(form)
     setDeleteDialogOpen(true)
@@ -517,9 +454,13 @@ export default function OutOfSectionApp() {
                     </div>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{form.total_of_services} services</Badge>
-                      <Button variant="outline" size="sm" onClick={() => handleEdit(form)}>
-                        <Edit className="w-4 h-4 mr-1" />
-                        Edit
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => (window.location.href = `/out-of-section/${form.id}`)}
+                      >
+                        <FileText className="w-4 h-4 mr-1" />
+                        View Details
                       </Button>
                       <Button
                         variant="outline"

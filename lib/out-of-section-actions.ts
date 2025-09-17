@@ -98,6 +98,73 @@ interface OutOfSectionFormInput {
   serviceChecks: ServiceCheckInput[]
 }
 
+export async function getOutOfSectionFormsForCalendar(startDate?: string, endDate?: string) {
+  try {
+    console.log("=== OUT-OF-SECTION CALENDAR DEBUG ===")
+    console.log("getOutOfSectionFormsForCalendar called with:", { startDate, endDate })
+
+    let forms
+
+    if (startDate && endDate) {
+      console.log("Using date range query")
+      forms = await sql`
+        SELECT 
+          f.id,
+          f.inspector_name,
+          f.date,
+          f.place_of_work,
+          f.line_or_route_number,
+          f.direction,
+          f.created_at,
+          COUNT(s.id)::integer as service_checks_count
+        FROM out_of_section_forms f
+        LEFT JOIN out_of_section_service_checks s ON f.id = s.form_id
+        WHERE f.date >= ${startDate} AND f.date <= ${endDate}
+        GROUP BY f.id, f.inspector_name, f.date, f.place_of_work, f.line_or_route_number, f.direction, f.created_at
+        ORDER BY f.date DESC, f.created_at DESC
+      `
+    } else {
+      console.log("Using query without date range")
+      forms = await sql`
+        SELECT 
+          f.id,
+          f.inspector_name,
+          f.date,
+          f.place_of_work,
+          f.line_or_route_number,
+          f.direction,
+          f.created_at,
+          COUNT(s.id)::integer as service_checks_count
+        FROM out_of_section_forms f
+        LEFT JOIN out_of_section_service_checks s ON f.id = s.form_id
+        GROUP BY f.id, f.inspector_name, f.date, f.place_of_work, f.line_or_route_number, f.direction, f.created_at
+        ORDER BY f.date DESC, f.created_at DESC
+      `
+    }
+
+    console.log("Raw database result:", forms)
+    console.log("Number of out-of-section forms found:", forms.length)
+
+    if (forms.length > 0) {
+      console.log("Sample out-of-section form:", forms[0])
+    }
+
+    console.log("=== OUT-OF-SECTION CALENDAR DEBUG END ===")
+
+    return {
+      success: true,
+      data: forms,
+    }
+  } catch (error) {
+    console.error("Error fetching out-of-section forms for calendar:", error)
+    return {
+      success: false,
+      message: "Failed to fetch out-of-section forms",
+      data: [],
+    }
+  }
+}
+
 export async function saveOutOfSectionForm(formData: OutOfSectionFormInput) {
   try {
     console.log("=== SAVE OUT-OF-SECTION FORM DEBUG ===")
@@ -346,73 +413,6 @@ export async function getOutOfSectionForms(limit = 50, offset = 0) {
     }
   } catch (error) {
     console.error("Error fetching out-of-section forms:", error)
-    return {
-      success: false,
-      message: "Failed to fetch out-of-section forms",
-      data: [],
-    }
-  }
-}
-
-export async function getOutOfSectionFormsForCalendar(startDate?: string, endDate?: string) {
-  try {
-    console.log("=== OUT-OF-SECTION CALENDAR DEBUG ===")
-    console.log("getOutOfSectionFormsForCalendar called with:", { startDate, endDate })
-
-    let forms
-
-    if (startDate && endDate) {
-      console.log("Using date range query")
-      forms = await sql`
-        SELECT 
-          f.id,
-          f.inspector_name,
-          f.date,
-          f.place_of_work,
-          f.line_or_route_number,
-          f.direction,
-          f.created_at,
-          COUNT(s.id)::integer as service_checks_count
-        FROM out_of_section_forms f
-        LEFT JOIN out_of_section_service_checks s ON f.id = s.form_id
-        WHERE f.date >= ${startDate} AND f.date <= ${endDate}
-        GROUP BY f.id, f.inspector_name, f.date, f.place_of_work, f.line_or_route_number, f.direction, f.created_at
-        ORDER BY f.date DESC, f.created_at DESC
-      `
-    } else {
-      console.log("Using query without date range")
-      forms = await sql`
-        SELECT 
-          f.id,
-          f.inspector_name,
-          f.date,
-          f.place_of_work,
-          f.line_or_route_number,
-          f.direction,
-          f.created_at,
-          COUNT(s.id)::integer as service_checks_count
-        FROM out_of_section_forms f
-        LEFT JOIN out_of_section_service_checks s ON f.id = s.form_id
-        GROUP BY f.id, f.inspector_name, f.date, f.place_of_work, f.line_or_route_number, f.direction, f.created_at
-        ORDER BY f.date DESC, f.created_at DESC
-      `
-    }
-
-    console.log("Raw database result:", forms)
-    console.log("Number of out-of-section forms found:", forms.length)
-
-    if (forms.length > 0) {
-      console.log("Sample out-of-section form:", forms[0])
-    }
-
-    console.log("=== OUT-OF-SECTION CALENDAR DEBUG END ===")
-
-    return {
-      success: true,
-      data: forms,
-    }
-  } catch (error) {
-    console.error("Error fetching out-of-section forms for calendar:", error)
     return {
       success: false,
       message: "Failed to fetch out-of-section forms",

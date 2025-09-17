@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react" // Import useEffect
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -668,6 +668,11 @@ export function CalendarView({ forms: initialForms, oosForms: initialOOSForms }:
                             <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
                               {form.service_checks_count} services
                             </Badge>
+                            <Link href={`/out-of-section/${form.id}`}>
+                              <Button variant="outline" size="sm">
+                                View Details
+                              </Button>
+                            </Link>
                             <Button
                               variant="outline"
                               size="sm"

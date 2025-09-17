@@ -18,7 +18,7 @@ interface ServiceCheckInput {
   passesUsed: number
   addressOfStop: string
   observations: string
-  nonCompliance: boolean // Add this field
+  nonCompliance: boolean
 }
 
 interface DailyInspectionFormInput {
@@ -76,7 +76,7 @@ export async function saveDailyInspectionForm(formData: DailyInspectionFormInput
       console.log("Saving service check with observations:", {
         observations: check.observations,
         hasObservations: !!check.observations && check.observations.trim() !== "",
-      }) // Add this debug log
+      })
 
       return sql`
         INSERT INTO service_checks (
