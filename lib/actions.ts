@@ -1,7 +1,10 @@
 "use server"
 
-import { sql, type DailyInspectionFormDB, type ServiceCheckDB, type DailyInspectionFormWithChecks } from "./database"
+import { neon } from "@neondatabase/serverless"
+import type { DailyInspectionFormDB, ServiceCheckDB, DailyInspectionFormWithChecks } from "./database"
 import { revalidatePath } from "next/cache"
+
+const sql = neon(process.env.DATABASE_URL!)
 
 // Interface for the form data from the frontend
 interface ServiceCheckInput {
@@ -33,6 +36,8 @@ interface DailyInspectionFormInput {
 
 export async function saveDailyInspectionForm(formData: DailyInspectionFormInput) {
   try {
+    console.log("Saving daily inspection form:", formData)
+
     // Validate required fields
     if (!formData.formHeader.inspectorName || !formData.formHeader.placeOfWork || !formData.formHeader.date) {
       throw new Error("Missing required form header fields")
@@ -42,8 +47,8 @@ export async function saveDailyInspectionForm(formData: DailyInspectionFormInput
       throw new Error("At least one service check is required")
     }
 
-    // Start a transaction by inserting the main form first
-    const [form] = (await sql`
+    // Insert the main form
+    const formResult = await sql`
       INSERT INTO daily_inspection_forms (
         title, inspector_name, date, place_of_work
       ) VALUES (
@@ -51,16 +56,13 @@ export async function saveDailyInspectionForm(formData: DailyInspectionFormInput
         ${formData.formHeader.inspectorName},
         ${formData.formHeader.date},
         ${formData.formHeader.placeOfWork}
-      )
-      RETURNING *
-    `) as DailyInspectionFormDB[]
+      ) RETURNING id
+    `
 
-    if (!form) {
-      throw new Error("Failed to create daily inspection form")
-    }
+    const formId = formResult[0].id
 
-    // Insert all service checks
-    const serviceCheckPromises = formData.serviceChecks.map((check) => {
+    // Insert service checks
+    for (const check of formData.serviceChecks) {
       // Validate required fields for each service check
       if (
         !check.lineOrRouteNumber ||
@@ -73,120 +75,21 @@ export async function saveDailyInspectionForm(formData: DailyInspectionFormInput
         throw new Error("Missing required service check fields")
       }
 
-      console.log("Saving service check with observations:", {
-        observations: check.observations,
-        hasObservations: !!check.observations && check.observations.trim() !== "",
-      })
-
-      return sql`
+      await sql`
         INSERT INTO service_checks (
-          form_id, line_or_route_number, driver_name, service_code,
-          fleet_coach_number, exact_hour_of_arrival, gps_minutes, gps_status,
-          passengers_on_board, passes_used, address_of_stop, observations, non_compliance
-        ) VALUES (
-          ${form.id},
-          ${check.lineOrRouteNumber},
-          ${check.driverName},
-          ${check.serviceCode},
-          ${check.fleetCoachNumber},
-          ${check.exactHourOfArrival},
-          ${check.gpsStatus.minutes},
-          ${check.gpsStatus.status},
-          ${check.passengersOnBoard},
-          ${check.passesUsed},
-          ${check.addressOfStop},
-          ${check.observations || null},
-          ${check.nonCompliance || false}
-        )
-        RETURNING *
-      `
-    })
-
-    await Promise.all(serviceCheckPromises)
-
-    revalidatePath("/dashboard")
-    revalidatePath("/calendar")
-
-    return {
-      success: true,
-      message: "Daily inspection form saved successfully",
-      formId: form.id,
-    }
-  } catch (error) {
-    console.error("Error saving daily inspection form:", error)
-    return {
-      success: false,
-      message: error instanceof Error ? error.message : "Failed to save daily inspection form",
-    }
-  }
-}
-
-export async function updateDailyInspectionForm(formId: number, formData: DailyInspectionFormInput) {
-  try {
-    // Validate required fields
-    if (!formData.formHeader.inspectorName || !formData.formHeader.placeOfWork || !formData.formHeader.date) {
-      throw new Error("Missing required form header fields")
-    }
-
-    if (formData.serviceChecks.length === 0) {
-      throw new Error("At least one service check is required")
-    }
-
-    // Check if the form exists and was created today (in UTC-3)
-    const [existingForm] = (await sql`
-      SELECT * FROM daily_inspection_forms WHERE id = ${formId}
-    `) as DailyInspectionFormDB[]
-
-    if (!existingForm) {
-      throw new Error("Form not found")
-    }
-
-    // Check if the form was created today in UTC-3 timezone
-    const todayUTC3 = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })
-    const formCreatedDateUTC3 = new Date(existingForm.created_at).toLocaleDateString("en-CA", {
-      timeZone: "America/Argentina/Buenos_Aires",
-    })
-
-    if (formCreatedDateUTC3 !== todayUTC3) {
-      throw new Error("Forms can only be edited on the day they were created")
-    }
-
-    // Update the main form
-    await sql`
-      UPDATE daily_inspection_forms 
-      SET 
-        title = ${formData.formHeader.title},
-        inspector_name = ${formData.formHeader.inspectorName},
-        date = ${formData.formHeader.date},
-        place_of_work = ${formData.formHeader.placeOfWork},
-        updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${formId}
-    `
-
-    // Delete existing service checks
-    await sql`
-      DELETE FROM service_checks WHERE form_id = ${formId}
-    `
-
-    // Insert updated service checks
-    const serviceCheckPromises = formData.serviceChecks.map((check) => {
-      // Validate required fields for each service check
-      if (
-        !check.lineOrRouteNumber ||
-        !check.driverName ||
-        !check.serviceCode ||
-        !check.fleetCoachNumber ||
-        !check.exactHourOfArrival ||
-        !check.addressOfStop
-      ) {
-        throw new Error("Missing required service check fields")
-      }
-
-      return sql`
-        INSERT INTO service_checks (
-          form_id, line_or_route_number, driver_name, service_code,
-          fleet_coach_number, exact_hour_of_arrival, gps_minutes, gps_status,
-          passengers_on_board, passes_used, address_of_stop, observations, non_compliance
+          form_id,
+          line_or_route_number,
+          driver_name,
+          service_code,
+          fleet_coach_number,
+          exact_hour_of_arrival,
+          gps_minutes,
+          gps_status,
+          passengers_on_board,
+          passes_used,
+          address_of_stop,
+          observations,
+          non_compliance
         ) VALUES (
           ${formId},
           ${check.lineOrRouteNumber},
@@ -202,11 +105,109 @@ export async function updateDailyInspectionForm(formId: number, formData: DailyI
           ${check.observations || null},
           ${check.nonCompliance || false}
         )
-        RETURNING *
       `
-    })
+    }
 
-    await Promise.all(serviceCheckPromises)
+    revalidatePath("/dashboard")
+    revalidatePath("/calendar")
+
+    return {
+      success: true,
+      message: `Daily inspection form saved successfully with ID: ${formId}`,
+      formId: formId,
+    }
+  } catch (error) {
+    console.error("Error saving daily inspection form:", error)
+    return {
+      success: false,
+      message: `Error saving form: ${error instanceof Error ? error.message : "Unknown error"}`,
+    }
+  }
+}
+
+export async function updateDailyInspectionForm(formId: number, formData: DailyInspectionFormInput) {
+  try {
+    console.log("Updating daily inspection form:", formId, formData)
+
+    // Validate required fields
+    if (!formData.formHeader.inspectorName || !formData.formHeader.placeOfWork || !formData.formHeader.date) {
+      throw new Error("Missing required form header fields")
+    }
+
+    if (formData.serviceChecks.length === 0) {
+      throw new Error("At least one service check is required")
+    }
+
+    // Check if the form exists
+    const [existingForm] = (await sql`
+      SELECT * FROM daily_inspection_forms WHERE id = ${formId}
+    `) as DailyInspectionFormDB[]
+
+    if (!existingForm) {
+      throw new Error("Form not found")
+    }
+
+    // Update the main form
+    await sql`
+      UPDATE daily_inspection_forms 
+      SET 
+        title = ${formData.formHeader.title},
+        inspector_name = ${formData.formHeader.inspectorName},
+        date = ${formData.formHeader.date},
+        place_of_work = ${formData.formHeader.placeOfWork},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${formId}
+    `
+
+    // Delete existing service checks
+    await sql`DELETE FROM service_checks WHERE form_id = ${formId}`
+
+    // Insert updated service checks
+    for (const check of formData.serviceChecks) {
+      // Validate required fields for each service check
+      if (
+        !check.lineOrRouteNumber ||
+        !check.driverName ||
+        !check.serviceCode ||
+        !check.fleetCoachNumber ||
+        !check.exactHourOfArrival ||
+        !check.addressOfStop
+      ) {
+        throw new Error("Missing required service check fields")
+      }
+
+      await sql`
+        INSERT INTO service_checks (
+          form_id,
+          line_or_route_number,
+          driver_name,
+          service_code,
+          fleet_coach_number,
+          exact_hour_of_arrival,
+          gps_minutes,
+          gps_status,
+          passengers_on_board,
+          passes_used,
+          address_of_stop,
+          observations,
+          non_compliance
+        ) VALUES (
+          ${formId},
+          ${check.lineOrRouteNumber},
+          ${check.driverName},
+          ${check.serviceCode},
+          ${check.fleetCoachNumber},
+          ${check.exactHourOfArrival},
+          ${check.gpsStatus.minutes},
+          ${check.gpsStatus.status},
+          ${check.passengersOnBoard},
+          ${check.passesUsed},
+          ${check.addressOfStop},
+          ${check.observations || null},
+          ${check.nonCompliance || false}
+        )
+      `
+    }
 
     revalidatePath("/dashboard")
     revalidatePath("/calendar")
@@ -214,23 +215,29 @@ export async function updateDailyInspectionForm(formId: number, formData: DailyI
 
     return {
       success: true,
-      message: "Daily inspection form updated successfully",
-      formId: formId,
+      message: `Daily inspection form updated successfully`,
     }
   } catch (error) {
     console.error("Error updating daily inspection form:", error)
     return {
       success: false,
-      message: error instanceof Error ? error.message : "Failed to update daily inspection form",
+      message: `Error updating form: ${error instanceof Error ? error.message : "Unknown error"}`,
     }
   }
 }
 
 export async function getDailyInspectionForms(limit = 50, offset = 0) {
   try {
+    console.log("Getting daily inspection forms with limit:", limit)
+
     const forms = (await sql`
-      SELECT * FROM daily_inspection_forms 
-      ORDER BY date DESC, created_at DESC 
+      SELECT 
+        f.*,
+        COUNT(sc.id) as service_checks_count
+      FROM daily_inspection_forms f
+      LEFT JOIN service_checks sc ON f.id = sc.form_id
+      GROUP BY f.id
+      ORDER BY f.created_at DESC
       LIMIT ${limit} OFFSET ${offset}
     `) as DailyInspectionFormDB[]
 
@@ -239,10 +246,10 @@ export async function getDailyInspectionForms(limit = 50, offset = 0) {
       data: forms,
     }
   } catch (error) {
-    console.error("Error fetching daily inspection forms:", error)
+    console.error("Error getting daily inspection forms:", error)
     return {
       success: false,
-      message: "Failed to fetch daily inspection forms",
+      message: `Error getting forms: ${error instanceof Error ? error.message : "Unknown error"}`,
       data: [],
     }
   }
@@ -264,9 +271,9 @@ export async function getDailyInspectionFormsForCalendar(startDate?: string, end
           f.date,
           f.place_of_work,
           f.created_at,
-          COUNT(s.id)::integer as service_checks_count
+          COUNT(sc.id)::integer as service_checks_count
         FROM daily_inspection_forms f
-        LEFT JOIN service_checks s ON f.id = s.form_id
+        LEFT JOIN service_checks sc ON f.id = sc.form_id
         WHERE f.date >= ${startDate} AND f.date <= ${endDate}
         GROUP BY f.id, f.inspector_name, f.date, f.place_of_work, f.created_at
         ORDER BY f.date DESC, f.created_at DESC
@@ -280,9 +287,9 @@ export async function getDailyInspectionFormsForCalendar(startDate?: string, end
           f.date,
           f.place_of_work,
           f.created_at,
-          COUNT(s.id)::integer as service_checks_count
+          COUNT(sc.id)::integer as service_checks_count
         FROM daily_inspection_forms f
-        LEFT JOIN service_checks s ON f.id = s.form_id
+        LEFT JOIN service_checks sc ON f.id = sc.form_id
         GROUP BY f.id, f.inspector_name, f.date, f.place_of_work, f.created_at
         ORDER BY f.date DESC, f.created_at DESC
       `
@@ -351,9 +358,20 @@ export async function getDailyInspectionFormById(id: number) {
 
 export async function deleteDailyInspectionForm(id: number) {
   try {
-    const result = await sql`
-      DELETE FROM daily_inspection_forms WHERE id = ${id}
-    `
+    console.log("Deleting daily inspection form with ID:", id)
+
+    // Delete service checks first (foreign key constraint)
+    await sql`DELETE FROM service_checks WHERE form_id = ${id}`
+
+    // Delete the main form
+    const result = await sql`DELETE FROM daily_inspection_forms WHERE id = ${id} RETURNING id`
+
+    if (result.length === 0) {
+      return {
+        success: false,
+        message: "Form not found",
+      }
+    }
 
     revalidatePath("/dashboard")
     revalidatePath("/calendar")
@@ -366,58 +384,88 @@ export async function deleteDailyInspectionForm(id: number) {
     console.error("Error deleting daily inspection form:", error)
     return {
       success: false,
-      message: "Failed to delete daily inspection form",
+      message: `Error deleting form: ${error instanceof Error ? error.message : "Unknown error"}`,
     }
   }
 }
 
-export async function getInspectionStats() {
+export async function getDashboardStats() {
   try {
-    const [totalForms] = await sql`
+    console.log("Getting dashboard statistics")
+
+    // Get total forms count
+    const totalFormsResult = await sql`
       SELECT COUNT(*) as count FROM daily_inspection_forms
-      WHERE date >= DATE_TRUNC('month', CURRENT_DATE)
     `
+    const totalForms = Number.parseInt(totalFormsResult[0].count) || 0
 
-    // Modified query to count service checks only from forms in the current month
-    const [totalChecks] = await sql`
-      SELECT COUNT(s.*) as count 
-      FROM service_checks s
-      INNER JOIN daily_inspection_forms f ON s.form_id = f.id
-      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+    // Get forms this month
+    const thisMonthResult = await sql`
+      SELECT COUNT(*) as count 
+      FROM daily_inspection_forms 
+      WHERE DATE_TRUNC('month', date) = DATE_TRUNC('month', CURRENT_DATE)
     `
+    const formsThisMonth = Number.parseInt(thisMonthResult[0].count) || 0
 
-    const [recentForms] = await sql`
-      SELECT COUNT(*) as count FROM daily_inspection_forms 
-      WHERE date >= CURRENT_DATE - INTERVAL '7 days'
-    `
-
-    const statusStats = await sql`
+    // Get GPS status counts
+    const gpsStatusResult = await sql`
       SELECT 
-        s.gps_status,
+        gps_status,
         COUNT(*) as count
-      FROM service_checks s
-      INNER JOIN daily_inspection_forms f ON s.form_id = f.id
-      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
-      GROUP BY s.gps_status
+      FROM service_checks 
+      WHERE gps_status IS NOT NULL
+      GROUP BY gps_status
     `
+
+    const gpsStats = {
+      "on-time": 0,
+      early: 0,
+      late: 0,
+    }
+
+    gpsStatusResult.forEach((row) => {
+      const status = row.gps_status as keyof typeof gpsStats
+      if (status in gpsStats) {
+        gpsStats[status] = Number.parseInt(row.count) || 0
+      }
+    })
+
+    // Get non-compliance count
+    const nonComplianceResult = await sql`
+      SELECT COUNT(*) as count 
+      FROM service_checks 
+      WHERE non_compliance = true
+    `
+    const nonComplianceCount = Number.parseInt(nonComplianceResult[0].count) || 0
+
+    // Get total service checks
+    const totalServiceChecksResult = await sql`
+      SELECT COUNT(*) as count FROM service_checks
+    `
+    const totalServiceChecks = Number.parseInt(totalServiceChecksResult[0].count) || 0
 
     return {
       success: true,
       data: {
-        totalForms: Number.parseInt(totalForms.count),
-        totalChecks: Number.parseInt(totalChecks.count),
-        recentForms: Number.parseInt(recentForms.count),
-        statusStats: statusStats.map((stat) => ({
-          status: stat.gps_status,
-          count: Number.parseInt(stat.count),
-        })),
+        totalForms,
+        formsThisMonth,
+        gpsStats,
+        nonComplianceCount,
+        totalServiceChecks,
       },
     }
   } catch (error) {
-    console.error("Error fetching inspection stats:", error)
+    console.error("Error getting dashboard stats:", error)
     return {
       success: false,
-      message: "Failed to fetch inspection statistics",
+      message: `Error getting dashboard stats: ${error instanceof Error ? error.message : "Unknown error"}`,
+      data: {
+        totalForms: 0,
+        formsThisMonth: 0,
+        gpsStats: { "on-time": 0, early: 0, late: 0 },
+        nonComplianceCount: 0,
+        totalServiceChecks: 0,
+      },
     }
   }
 }
