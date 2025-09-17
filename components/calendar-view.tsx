@@ -2,9 +2,8 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,404 +13,381 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ChevronLeft, ChevronRight, FileText, Users, Trash2, CheckCircle, AlertCircle } from "lucide-react"
-import { deleteDailyInspectionForm } from "@/lib/actions"
+import { ChevronLeft, ChevronRight, Trash2, Eye, Calendar, MapPin, Clock, Users } from "lucide-react"
+import { deleteInspectionForm } from "@/lib/actions"
 import { deleteOutOfSectionForm } from "@/lib/out-of-section-actions"
+import Link from "next/link"
 
 interface CalendarForm {
+  form_type: "daily-inspection" | "out-of-section"
   id: number
-  type: "daily-inspection" | "out-of-section"
-  date: string
   inspector_name: string
+  date: string
   place_of_work: string
-  service_checks_count: number
+  line_or_route_number: string
+  direction: string
+  total_of_services: number
+  total_of_passengers: number
+  total_issues: number
+  total_of_passes: number
+  created_at: string
 }
 
 interface CalendarViewProps {
-  forms: CalendarForm[]
+  initialForms: CalendarForm[]
+  initialYear: number
+  initialMonth: number
 }
 
-export function CalendarView({ forms }: CalendarViewProps) {
-  const [currentDate, setCurrentDate] = useState(new Date())
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [formToDelete, setFormToDelete] = useState<CalendarForm | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [deleteResult, setDeleteResult] = useState<{ success: boolean; message: string } | null>(null)
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+]
 
-  // Get current month and year
-  const currentMonth = currentDate.getMonth()
-  const currentYear = currentDate.getFullYear()
+const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
 
-  // Generate calendar days
-  const firstDayOfMonth = new Date(currentYear, currentMonth, 1)
-  const lastDayOfMonth = new Date(currentYear, currentMonth + 1, 0)
-  const firstDayOfWeek = firstDayOfMonth.getDay()
-  const daysInMonth = lastDayOfMonth.getDate()
+export function CalendarView({ initialForms, initialYear, initialMonth }: CalendarViewProps) {
+  const [currentYear, setCurrentYear] = useState(initialYear)
+  const [currentMonth, setCurrentMonth] = useState(initialMonth)
+  const [forms, setForms] = useState<CalendarForm[]>(initialForms)
+  const [loading, setLoading] = useState(false)
 
-  // Create array of calendar days
-  const calendarDays = []
+  console.log("CalendarView rendered with:", {
+    formsCount: forms.length,
+    currentYear,
+    currentMonth,
+    sampleForms: forms.slice(0, 3),
+  })
 
-  // Add empty cells for days before the first day of the month
-  for (let i = 0; i < firstDayOfWeek; i++) {
-    calendarDays.push(null)
-  }
+  // Filter forms for the current month and year
+  const currentMonthForms = forms.filter((form) => {
+    const formDate = new Date(form.date)
+    const formYear = formDate.getFullYear()
+    const formMonth = formDate.getMonth() + 1
 
-  // Add days of the month
-  for (let day = 1; day <= daysInMonth; day++) {
-    calendarDays.push(day)
-  }
+    console.log("Filtering form:", {
+      formId: form.id,
+      formDate: form.date,
+      formYear,
+      formMonth,
+      currentYear,
+      currentMonth,
+      matches: formYear === currentYear && formMonth === currentMonth,
+    })
 
-  // Group forms by date
-  const formsByDate = forms.reduce(
-    (acc, form) => {
-      const dateKey = new Date(form.date).toISOString().split("T")[0]
-      if (!acc[dateKey]) {
-        acc[dateKey] = []
-      }
-      acc[dateKey].push(form)
-      return acc
-    },
-    {} as Record<string, CalendarForm[]>,
-  )
+    return formYear === currentYear && formMonth === currentMonth
+  })
 
-  const navigateMonth = (direction: "prev" | "next") => {
-    setCurrentDate((prev) => {
-      const newDate = new Date(prev)
-      if (direction === "prev") {
-        newDate.setMonth(prev.getMonth() - 1)
-      } else {
-        newDate.setMonth(prev.getMonth() + 1)
-      }
-      return newDate
+  console.log("Current month forms:", currentMonthForms.length)
+
+  // Get forms for a specific date
+  const getFormsForDate = (date: number): CalendarForm[] => {
+    return currentMonthForms.filter((form) => {
+      const formDate = new Date(form.date)
+      const formDay = formDate.getDate()
+
+      // Handle timezone issues by using UTC
+      const utcFormDate = new Date(form.date + "T00:00:00Z")
+      const utcFormDay = utcFormDate.getUTCDate()
+
+      console.log("Checking form for date:", {
+        targetDate: date,
+        formDate: form.date,
+        formDay,
+        utcFormDay,
+        matches: utcFormDay === date,
+      })
+
+      return utcFormDay === date
     })
   }
 
-  const navigateToMonth = (month: number, year: number) => {
-    setCurrentDate(new Date(year, month, 1))
-  }
+  // Generate calendar days
+  const generateCalendarDays = () => {
+    const firstDay = new Date(currentYear, currentMonth - 1, 1)
+    const lastDay = new Date(currentYear, currentMonth, 0)
+    const startDate = new Date(firstDay)
+    startDate.setDate(startDate.getDate() - firstDay.getDay())
 
-  const handleDeleteClick = (form: CalendarForm) => {
-    setFormToDelete(form)
-    setDeleteDialogOpen(true)
-  }
+    const days = []
+    const current = new Date(startDate)
 
-  const handleDeleteConfirm = async () => {
-    if (!formToDelete) return
+    for (let i = 0; i < 42; i++) {
+      const dayForms = getFormsForDate(current.getDate())
+      const isCurrentMonth = current.getMonth() === currentMonth - 1
 
-    setIsDeleting(true)
-    setDeleteResult(null)
-
-    try {
-      let result
-      if (formToDelete.type === "daily-inspection") {
-        result = await deleteDailyInspectionForm(formToDelete.id)
-      } else {
-        result = await deleteOutOfSectionForm(formToDelete.id)
-      }
-
-      setDeleteResult(result)
-
-      if (result.success) {
-        setDeleteDialogOpen(false)
-        setFormToDelete(null)
-        // Refresh the page to update the forms list
-        window.location.reload()
-      }
-    } catch (error) {
-      setDeleteResult({
-        success: false,
-        message: "An unexpected error occurred while deleting the form",
+      days.push({
+        date: current.getDate(),
+        fullDate: new Date(current),
+        isCurrentMonth,
+        forms: isCurrentMonth ? dayForms : [],
       })
-    } finally {
-      setIsDeleting(false)
+
+      current.setDate(current.getDate() + 1)
+    }
+
+    return days
+  }
+
+  const navigateMonth = (direction: "prev" | "next") => {
+    if (direction === "prev") {
+      if (currentMonth === 1) {
+        setCurrentMonth(12)
+        setCurrentYear(currentYear - 1)
+      } else {
+        setCurrentMonth(currentMonth - 1)
+      }
+    } else {
+      if (currentMonth === 12) {
+        setCurrentMonth(1)
+        setCurrentYear(currentYear + 1)
+      } else {
+        setCurrentMonth(currentMonth + 1)
+      }
     }
   }
 
-  const getDateKey = (day: number) => {
-    return new Date(currentYear, currentMonth, day).toISOString().split("T")[0]
+  const handleDeleteForm = async (form: CalendarForm) => {
+    setLoading(true)
+    try {
+      let result
+      if (form.form_type === "daily-inspection") {
+        result = await deleteInspectionForm(form.id)
+      } else {
+        result = await deleteOutOfSectionForm(form.id)
+      }
+
+      if (result.success) {
+        // Remove the form from the local state
+        setForms((prevForms) => prevForms.filter((f) => !(f.id === form.id && f.form_type === form.form_type)))
+      } else {
+        console.error("Failed to delete form:", result.error)
+        alert("Failed to delete form: " + result.error)
+      }
+    } catch (error) {
+      console.error("Error deleting form:", error)
+      alert("Error deleting form")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ]
-
-  const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-
-  // Generate year options (current year ± 5 years)
-  const currentYearNum = new Date().getFullYear()
-  const yearOptions = []
-  for (let year = currentYearNum - 5; year <= currentYearNum + 5; year++) {
-    yearOptions.push(year)
-  }
+  const calendarDays = generateCalendarDays()
 
   return (
     <div className="space-y-6">
-      {/* Delete Result Alert */}
-      {deleteResult && (
-        <Alert className={deleteResult.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
-          {deleteResult.success ? (
-            <CheckCircle className="h-4 w-4 text-green-600" />
-          ) : (
-            <AlertCircle className="h-4 w-4 text-red-600" />
-          )}
-          <AlertDescription className={deleteResult.success ? "text-green-800" : "text-red-800"}>
-            {deleteResult.message}
-          </AlertDescription>
-        </Alert>
-      )}
+      {/* Calendar Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button variant="outline" size="sm" onClick={() => navigateMonth("prev")} disabled={loading}>
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
 
+          <h2 className="text-2xl font-semibold">
+            {MONTHS[currentMonth - 1]} {currentYear}
+          </h2>
+
+          <Button variant="outline" size="sm" onClick={() => navigateMonth("next")} disabled={loading}>
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="flex items-center gap-2 text-sm text-gray-600">
+          <Calendar className="h-4 w-4" />
+          <span>{currentMonthForms.length} forms this month</span>
+        </div>
+      </div>
+
+      {/* Calendar Grid */}
       <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Calendar View</CardTitle>
-              <CardDescription>
-                Showing {forms.length} forms total ({forms.filter((f) => f.type === "daily-inspection").length} Daily
-                Inspection, {forms.filter((f) => f.type === "out-of-section").length} Out-of-Section)
-              </CardDescription>
-            </div>
-            <div className="flex items-center gap-2">
-              <Select
-                value={currentMonth.toString()}
-                onValueChange={(value) => navigateToMonth(Number.parseInt(value), currentYear)}
-              >
-                <SelectTrigger className="w-32">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {monthNames.map((month, index) => (
-                    <SelectItem key={index} value={index.toString()}>
-                      {month}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select
-                value={currentYear.toString()}
-                onValueChange={(value) => navigateToMonth(currentMonth, Number.parseInt(value))}
-              >
-                <SelectTrigger className="w-20">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {yearOptions.map((year) => (
-                    <SelectItem key={year} value={year.toString()}>
-                      {year}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="outline" size="sm" onClick={() => navigateMonth("prev")}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => navigateMonth("next")}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {/* Calendar Grid */}
-          <div className="grid grid-cols-7 gap-1">
-            {/* Day headers */}
-            {dayNames.map((day) => (
-              <div key={day} className="p-2 text-center font-medium text-gray-500 text-sm">
+        <CardContent className="p-0">
+          {/* Days of week header */}
+          <div className="grid grid-cols-7 border-b">
+            {DAYS.map((day) => (
+              <div key={day} className="p-3 text-center font-medium text-gray-500 border-r last:border-r-0">
                 {day}
               </div>
             ))}
+          </div>
 
-            {/* Calendar days */}
-            {calendarDays.map((day, index) => {
-              if (day === null) {
-                return <div key={index} className="p-2 h-24" />
-              }
+          {/* Calendar days */}
+          <div className="grid grid-cols-7">
+            {calendarDays.map((day, index) => (
+              <div
+                key={index}
+                className={`min-h-[120px] p-2 border-r border-b last:border-r-0 ${
+                  !day.isCurrentMonth ? "bg-gray-50 text-gray-400" : ""
+                }`}
+              >
+                <div className="font-medium mb-2">{day.date}</div>
 
-              const dateKey = getDateKey(day)
-              const dayForms = formsByDate[dateKey] || []
-              const isToday =
-                day === new Date().getDate() &&
-                currentMonth === new Date().getMonth() &&
-                currentYear === new Date().getFullYear()
-
-              return (
-                <div
-                  key={day}
-                  className={`p-1 h-24 border border-gray-200 ${isToday ? "bg-blue-50 border-blue-300" : "bg-white"}`}
-                >
-                  <div className="text-sm font-medium text-gray-900 mb-1">{day}</div>
-                  <div className="space-y-1">
-                    {dayForms.slice(0, 2).map((form) => (
+                <div className="space-y-1">
+                  {day.forms.map((form) => (
+                    <div key={`${form.form_type}-${form.id}`} className="group relative">
                       <div
-                        key={`${form.type}-${form.id}`}
-                        className="group relative cursor-pointer"
-                        onClick={() => {
-                          const url =
-                            form.type === "daily-inspection" ? `/dashboard/${form.id}` : `/out-of-section/${form.id}`
-                          window.open(url, "_blank")
-                        }}
+                        className={`text-xs p-1 rounded cursor-pointer transition-colors ${
+                          form.form_type === "daily-inspection"
+                            ? "bg-blue-100 hover:bg-blue-200 text-blue-800"
+                            : "bg-green-100 hover:bg-green-200 text-green-800"
+                        }`}
                       >
-                        <Badge
-                          variant={form.type === "daily-inspection" ? "default" : "secondary"}
-                          className="text-xs px-1 py-0 w-full justify-start truncate"
-                        >
-                          {form.type === "daily-inspection" ? (
-                            <FileText className="w-2 h-2 mr-1" />
-                          ) : (
-                            <Users className="w-2 h-2 mr-1" />
-                          )}
-                          {form.inspector_name.split(" ")[0]}
-                        </Badge>
-                        {/* Hover tooltip */}
-                        <div className="absolute left-0 top-full mt-1 hidden group-hover:block z-10 bg-black text-white text-xs p-2 rounded shadow-lg whitespace-nowrap">
-                          <div className="font-medium">{form.inspector_name}</div>
-                          <div>{form.place_of_work}</div>
-                          <div>{form.service_checks_count} services</div>
-                          <div className="text-gray-300">
-                            {form.type === "daily-inspection" ? "Daily Inspection" : "Out-of-Section"}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1 min-w-0 flex-1">
+                            <Badge
+                              variant="secondary"
+                              className={`text-xs px-1 py-0 ${
+                                form.form_type === "daily-inspection" ? "bg-blue-200" : "bg-green-200"
+                              }`}
+                            >
+                              {form.form_type === "daily-inspection" ? "DI" : "OOS"}
+                            </Badge>
+                            <span className="truncate">{form.inspector_name}</span>
+                          </div>
+
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <Link
+                              href={`/${form.form_type === "daily-inspection" ? "dashboard" : "out-of-section"}/${form.id}`}
+                              className="p-1 hover:bg-white rounded"
+                              title="View form"
+                            >
+                              <Eye className="h-3 w-3" />
+                            </Link>
+
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <button className="p-1 hover:bg-red-100 rounded text-red-600" title="Delete form">
+                                  <Trash2 className="h-3 w-3" />
+                                </button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Form</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete this{" "}
+                                    {form.form_type === "daily-inspection" ? "Daily Inspection" : "Out-of-Section"} form
+                                    by {form.inspector_name}? This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => handleDeleteForm(form)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+
+                        <div className="mt-1 text-xs opacity-75">
+                          <div className="flex items-center gap-2">
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-2 w-2" />
+                              {form.place_of_work}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="flex items-center gap-1">
+                              <Users className="h-2 w-2" />
+                              {form.total_of_passengers}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-2 w-2" />
+                              {form.total_of_services}
+                            </span>
                           </div>
                         </div>
                       </div>
-                    ))}
-                    {dayForms.length > 2 && (
-                      <div className="text-xs text-gray-500 text-center">+{dayForms.length - 2} more</div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Forms List for Current Month */}
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            Forms for {monthNames[currentMonth]} {currentYear}
-          </CardTitle>
-          <CardDescription>
-            {
-              forms.filter((form) => {
-                const formDate = new Date(form.date)
-                return formDate.getMonth() === currentMonth && formDate.getFullYear() === currentYear
-              }).length
-            }{" "}
-            forms in this month
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {forms
-              .filter((form) => {
-                const formDate = new Date(form.date)
-                return formDate.getMonth() === currentMonth && formDate.getFullYear() === currentYear
-              })
-              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
-              .map((form) => (
-                <div
-                  key={`${form.type}-${form.id}`}
-                  className="flex items-center justify-between p-3 border rounded-lg hover:bg-gray-50"
-                >
-                  <div className="flex items-center gap-3">
-                    {form.type === "daily-inspection" ? (
-                      <FileText className="w-5 h-5 text-blue-600" />
-                    ) : (
-                      <Users className="w-5 h-5 text-purple-600" />
-                    )}
-                    <div>
-                      <div className="font-medium">{form.inspector_name}</div>
-                      <div className="text-sm text-gray-600">{form.place_of_work}</div>
-                      <div className="text-xs text-gray-400">
-                        {new Date(form.date).toLocaleDateString()} • {form.service_checks_count} services
-                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant={form.type === "daily-inspection" ? "default" : "secondary"}>
-                      {form.type === "daily-inspection" ? "Daily Inspection" : "Out-of-Section"}
-                    </Badge>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const url =
-                          form.type === "daily-inspection" ? `/dashboard/${form.id}` : `/out-of-section/${form.id}`
-                        window.open(url, "_blank")
-                      }}
-                    >
-                      <FileText className="w-4 h-4 mr-1" />
-                      View
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleDeleteClick(form)}
-                      className="text-red-600 hover:text-red-800"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
+                  ))}
                 </div>
-              ))}
-            {forms.filter((form) => {
-              const formDate = new Date(form.date)
-              return formDate.getMonth() === currentMonth && formDate.getFullYear() === currentYear
-            }).length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No forms found for this month.</p>
               </div>
-            )}
+            ))}
           </div>
         </CardContent>
       </Card>
 
-      {/* Delete Confirmation Dialog */}
-      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Form</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this form? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
+      {/* Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Total Forms</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{currentMonthForms.length}</div>
+          </CardContent>
+        </Card>
 
-          {formToDelete && (
-            <div className="mt-3 p-3 bg-gray-50 rounded-lg text-sm">
-              <p className="font-medium">{formToDelete.inspector_name}</p>
-              <p className="text-gray-600">{formToDelete.place_of_work}</p>
-              <p className="text-gray-600">
-                {formToDelete.type === "daily-inspection" ? "Daily Inspection" : "Out-of-Section"} •{" "}
-                {new Date(formToDelete.date).toLocaleDateString()}
-              </p>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Daily Inspections</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              {currentMonthForms.filter((f) => f.form_type === "daily-inspection").length}
             </div>
-          )}
+          </CardContent>
+        </Card>
 
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDeleteConfirm}
-              disabled={isDeleting}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {isDeleting ? "Deleting..." : "Delete Form"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Out-of-Section</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {currentMonthForms.filter((f) => f.form_type === "out-of-section").length}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Total Passengers</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {currentMonthForms.reduce((sum, form) => sum + form.total_of_passengers, 0)}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Debug Information */}
+      {process.env.NODE_ENV === "development" && (
+        <Card className="mt-6">
+          <CardHeader>
+            <CardTitle className="text-sm">Debug Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xs space-y-2">
+              <div>
+                Current Year/Month: {currentYear}/{currentMonth}
+              </div>
+              <div>Total Forms: {forms.length}</div>
+              <div>Current Month Forms: {currentMonthForms.length}</div>
+              <div>Sample Forms:</div>
+              <pre className="bg-gray-100 p-2 rounded text-xs overflow-auto">
+                {JSON.stringify(currentMonthForms.slice(0, 2), null, 2)}
+              </pre>
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   )
 }

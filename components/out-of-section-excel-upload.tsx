@@ -246,7 +246,6 @@ export function OutOfSectionExcelUpload({ onDataLoaded, onClose }: OutOfSectionE
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [preview, setPreview] = useState<any[] | null>(null)
-  const [debugInfo, setDebugInfo] = useState<any>(null)
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = event.target.files?.[0]
@@ -254,7 +253,6 @@ export function OutOfSectionExcelUpload({ onDataLoaded, onClose }: OutOfSectionE
       setFile(selectedFile)
       setError(null)
       setPreview(null)
-      setDebugInfo(null)
     }
   }
 
@@ -387,20 +385,6 @@ export function OutOfSectionExcelUpload({ onDataLoaded, onClose }: OutOfSectionE
         totalOfPasses: headerInfo.totalOfPasses || calculatedTotals.totalOfPasses,
       }
 
-      const debugData = {
-        headerInfo,
-        dataStartRow,
-        columnHeaders,
-        headerMapping,
-        processedRowsCount: processedRows.length,
-        serviceChecksCount: serviceChecks.length,
-        sampleProcessedRow: processedRows[0],
-        sampleServiceCheck: serviceChecks[0],
-        calculatedTotals,
-        formHeader,
-      }
-
-      setDebugInfo(debugData)
       setPreview(serviceChecks.slice(0, 5)) // Show first 5 rows as preview
 
       const formData: ExcelData = {
@@ -506,31 +490,6 @@ export function OutOfSectionExcelUpload({ onDataLoaded, onClose }: OutOfSectionE
                     ))}
                   </tbody>
                 </table>
-              </div>
-            </div>
-          )}
-
-          {debugInfo && (
-            <div className="space-y-2">
-              <h4 className="font-medium text-sm">Debug Information:</h4>
-              <div className="text-xs bg-gray-50 p-3 rounded-lg space-y-1">
-                <p>
-                  <strong>Header Info Found:</strong> {Object.keys(debugInfo.headerInfo).join(", ") || "None"}
-                </p>
-                <p>
-                  <strong>Data Start Row:</strong> {debugInfo.dataStartRow}
-                </p>
-                <p>
-                  <strong>Column Mapping:</strong> {Object.keys(debugInfo.headerMapping).length} columns mapped
-                </p>
-                <p>
-                  <strong>Service Checks:</strong> {debugInfo.serviceChecksCount} found
-                </p>
-                <p>
-                  <strong>Totals:</strong> Services: {debugInfo.formHeader.totalOfServices}, Passengers:{" "}
-                  {debugInfo.formHeader.totalOfPassengers}, OOS: {debugInfo.formHeader.totalOfOOS}, Passes:{" "}
-                  {debugInfo.formHeader.totalOfPasses}
-                </p>
               </div>
             </div>
           )}
