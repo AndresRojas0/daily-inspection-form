@@ -1,19 +1,224 @@
 "use server"
 
-import { neon } from "@neondatabase/serverless"
+import { sql } from "./database"
+import { revalidatePath } from "next/cache"
 
-const sql = neon(process.env.DATABASE_URL!)
+// Database interfaces for Out-of-Section forms
+export interface OutOfSectionFormDB {
+  id: number
+  title: string
+  inspector_name: string
+  date: string
+  place_of_work: string
+  line_or_route_number: string
+  direction: string
+  total_of_services: number
+  total_of_passengers: number
+  total_of_oos: number
+  total_of_passes: number
+  created_at: string
+  updated_at: string
+}
 
-export async function saveOutOfSectionForm(formData: any) {
+export interface OutOfSectionServiceCheckDB {
+  id: number
+  form_id: number
+  service_code: string
+  line_route_branch: string
+  exact_hour_of_schedule: string
+  gps_minutes: number
+  gps_seconds: number
+  gps_status: "on-time" | "early" | "late"
+  passengers_on_board: number
+  out_of_section_tickets: number
+  passes_used: number
+  observations: string | null
+  created_at: string
+}
+
+export interface OutOfSectionFormWithChecks extends OutOfSectionFormDB {
+  service_checks: OutOfSectionServiceCheckDB[]
+}
+
+// Interface for statistics
+export interface OutOfSectionStats {
+  totalForms: number
+  totalPassengers: number
+  totalPasses: number
+  totalOOS: number
+  byPlaceOfWork: {
+    place: string
+    passengers: number
+    passes: number
+    oos: number
+  }[]
+  byLineRoute: {
+    route: string
+    passengers: number
+    passes: number
+    oos: number
+  }[]
+  byRouteBranch: {
+    branch: string
+    passengers: number
+    passes: number
+    oos: number
+  }[]
+}
+
+// Interface for the form data from the frontend
+interface ServiceCheckInput {
+  serviceCode: string
+  lineRouteBranch: string
+  exactHourOfSchedule: string
+  gpsStatus: {
+    minutes: number
+    seconds: number
+    status: "on-time" | "early" | "late"
+  }
+  passengersOnBoard: number
+  outOfSectionTickets: number
+  passesUsed: number
+  observations: string
+}
+
+interface OutOfSectionFormInput {
+  formHeader: {
+    title: string
+    inspectorName: string
+    date: string
+    placeOfWork: string
+    lineOrRouteNumber: string
+    direction: string
+    totalOfServices: number
+    totalOfPassengers: number
+    totalOfOOS: number
+    totalOfPasses: number
+  }
+  serviceChecks: ServiceCheckInput[]
+}
+
+export async function getOutOfSectionFormsForCalendar(startDate?: string, endDate?: string) {
   try {
-    console.log("Saving out-of-section form:", formData)
+    console.log("=== OUT-OF-SECTION CALENDAR DEBUG ===")
+    console.log("getOutOfSectionFormsForCalendar called with:", { startDate, endDate })
 
-    // Insert the main form
-    const formResult = await sql`
-      INSERT INTO out_of_section_inspections (
-        inspector_name, date, place_of_work, line_or_route_number, direction,
+    let forms
+
+    if (startDate && endDate) {
+      console.log("Using date range query")
+      forms = await sql`
+        SELECT 
+          f.id,
+          f.inspector_name,
+          f.date,
+          f.place_of_work,
+          f.line_or_route_number,
+          f.direction,
+          f.created_at,
+          COUNT(s.id)::integer as service_checks_count
+        FROM out_of_section_forms f
+        LEFT JOIN out_of_section_service_checks s ON f.id = s.form_id
+        WHERE f.date >= ${startDate} AND f.date <= ${endDate}
+        GROUP BY f.id, f.inspector_name, f.date, f.place_of_work, f.line_or_route_number, f.direction, f.created_at
+        ORDER BY f.date DESC, f.created_at DESC
+      `
+    } else {
+      console.log("Using query without date range")
+      forms = await sql`
+        SELECT 
+          f.id,
+          f.inspector_name,
+          f.date,
+          f.place_of_work,
+          f.line_or_route_number,
+          f.direction,
+          f.created_at,
+          COUNT(s.id)::integer as service_checks_count
+        FROM out_of_section_forms f
+        LEFT JOIN out_of_section_service_checks s ON f.id = s.form_id
+        GROUP BY f.id, f.inspector_name, f.date, f.place_of_work, f.line_or_route_number, f.direction, f.created_at
+        ORDER BY f.date DESC, f.created_at DESC
+      `
+    }
+
+    console.log("Raw database result:", forms)
+    console.log("Number of out-of-section forms found:", forms.length)
+
+    if (forms.length > 0) {
+      console.log("Sample out-of-section form:", forms[0])
+    }
+
+    console.log("=== OUT-OF-SECTION CALENDAR DEBUG END ===")
+
+    return {
+      success: true,
+      data: forms,
+    }
+  } catch (error) {
+    console.error("Error fetching out-of-section forms for calendar:", error)
+    return {
+      success: false,
+      message: "Failed to fetch out-of-section forms",
+      data: [],
+    }
+  }
+}
+
+export async function saveOutOfSectionForm(formData: OutOfSectionFormInput) {
+  try {
+    console.log("=== SAVE OUT-OF-SECTION FORM DEBUG ===")
+    console.log("Form data received:", JSON.stringify(formData, null, 2))
+
+    // Check if tables exist first
+    try {
+      const tableCheck = await sql`
+        SELECT table_name 
+        FROM information_schema.tables 
+        WHERE table_schema = 'public' 
+        AND table_name IN ('out_of_section_forms', 'out_of_section_service_checks')
+      `
+      console.log(
+        "Tables found:",
+        tableCheck.map((t) => t.table_name),
+      )
+
+      if (tableCheck.length !== 2) {
+        throw new Error(
+          `Missing out-of-section tables. Found: ${tableCheck.map((t) => t.table_name).join(", ")}. Please run the database setup script or visit /debug-out-of-section to create tables.`,
+        )
+      }
+    } catch (tableError) {
+      console.error("Table check error:", tableError)
+      throw new Error(
+        `Database table check failed: ${tableError instanceof Error ? tableError.message : "Unknown error"}`,
+      )
+    }
+
+    // Validate required fields
+    if (
+      !formData.formHeader.inspectorName ||
+      !formData.formHeader.placeOfWork ||
+      !formData.formHeader.date ||
+      !formData.formHeader.lineOrRouteNumber ||
+      !formData.formHeader.direction
+    ) {
+      throw new Error("Missing required form header fields")
+    }
+
+    if (formData.serviceChecks.length === 0) {
+      throw new Error("At least one service check is required")
+    }
+
+    console.log("Validation passed, inserting form...")
+
+    // Insert the main form first
+    const [form] = (await sql`
+      INSERT INTO out_of_section_forms (
+        title, inspector_name, date, place_of_work, line_or_route_number, direction,
         total_of_services, total_of_passengers, total_of_oos, total_of_passes
       ) VALUES (
+        ${formData.formHeader.title},
         ${formData.formHeader.inspectorName},
         ${formData.formHeader.date},
         ${formData.formHeader.placeOfWork},
@@ -23,99 +228,110 @@ export async function saveOutOfSectionForm(formData: any) {
         ${formData.formHeader.totalOfPassengers},
         ${formData.formHeader.totalOfOOS},
         ${formData.formHeader.totalOfPasses}
-      ) RETURNING id
-    `
+      )
+      RETURNING *
+    `) as OutOfSectionFormDB[]
 
-    const formId = formResult[0].id
-
-    // Insert service checks
-    for (const check of formData.serviceChecks) {
-      await sql`
-        INSERT INTO out_of_section_service_checks (
-          form_id, service_code, line_route_branch, exact_hour_of_schedule,
-          gps_minutes, gps_seconds, gps_status, passengers_on_board,
-          out_of_section_tickets, passes_used, observations
-        ) VALUES (
-          ${formId},
-          ${check.serviceCode},
-          ${check.lineRouteBranch},
-          ${check.exactHourOfSchedule},
-          ${check.gpsStatus.minutes},
-          ${check.gpsStatus.seconds},
-          ${check.gpsStatus.status},
-          ${check.passengersOnBoard},
-          ${check.outOfSectionTickets},
-          ${check.passesUsed},
-          ${check.observations}
-        )
-      `
+    if (!form) {
+      throw new Error("Failed to create out-of-section form")
     }
 
-    return { success: true, formId }
-  } catch (error) {
-    console.error("Error saving out-of-section form:", error)
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
-  }
-}
+    console.log("Form created with ID:", form.id)
 
-export async function getOutOfSectionForms() {
-  try {
-    const forms = await sql`
-      SELECT 
-        id,
-        inspector_name,
-        date,
-        place_of_work,
-        line_or_route_number,
-        direction,
-        total_of_services,
-        total_of_passengers,
-        total_of_oos,
-        total_of_passes,
-        created_at
-      FROM out_of_section_inspections 
-      ORDER BY date DESC, created_at DESC
-    `
+    // Insert service checks (only those with service codes)
+    const filledServiceChecks = formData.serviceChecks.filter(
+      (check) => check.serviceCode && check.serviceCode.trim() !== "",
+    )
 
-    return { success: true, forms }
-  } catch (error) {
-    console.error("Error fetching out-of-section forms:", error)
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
-  }
-}
+    console.log("Filled service checks to insert:", filledServiceChecks.length)
 
-export async function getOutOfSectionFormById(id: number) {
-  try {
-    const forms = await sql`
-      SELECT * FROM out_of_section_inspections WHERE id = ${id}
-    `
+    if (filledServiceChecks.length > 0) {
+      const serviceCheckPromises = filledServiceChecks.map((check, index) => {
+        console.log(`Inserting service check ${index + 1}:`, check)
+        return sql`
+          INSERT INTO out_of_section_service_checks (
+            form_id, service_code, line_route_branch, exact_hour_of_schedule,
+            gps_minutes, gps_seconds, gps_status, passengers_on_board,
+            out_of_section_tickets, passes_used, observations
+          ) VALUES (
+            ${form.id},
+            ${check.serviceCode},
+            ${check.lineRouteBranch || ""},
+            ${check.exactHourOfSchedule || "00:00:00"},
+            ${check.gpsStatus.minutes},
+            ${check.gpsStatus.seconds},
+            ${check.gpsStatus.status},
+            ${check.passengersOnBoard},
+            ${check.outOfSectionTickets},
+            ${check.passesUsed},
+            ${check.observations || null}
+          )
+          RETURNING *
+        `
+      })
 
-    if (forms.length === 0) {
-      return { success: false, error: "Form not found" }
+      await Promise.all(serviceCheckPromises)
+      console.log("All service checks inserted successfully")
     }
 
-    const serviceChecks = await sql`
-      SELECT * FROM out_of_section_service_checks WHERE form_id = ${id} ORDER BY id
-    `
+    revalidatePath("/out-of-section")
+    revalidatePath("/dashboard")
+
+    console.log("=== SAVE COMPLETED SUCCESSFULLY ===")
 
     return {
       success: true,
-      form: forms[0],
-      serviceChecks,
+      message: "Out-of-section form saved successfully",
+      formId: form.id,
     }
   } catch (error) {
-    console.error("Error fetching out-of-section form:", error)
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+    console.error("=== SAVE ERROR ===")
+    console.error("Error saving out-of-section form:", error)
+    console.error("Error stack:", error instanceof Error ? error.stack : "No stack trace")
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to save out-of-section form",
+    }
   }
 }
 
-export async function updateOutOfSectionForm(id: number, formData: any) {
+export async function updateOutOfSectionForm(formId: number, formData: OutOfSectionFormInput) {
   try {
-    console.log("Updating out-of-section form:", id, formData)
+    // Validate required fields
+    if (
+      !formData.formHeader.inspectorName ||
+      !formData.formHeader.placeOfWork ||
+      !formData.formHeader.date ||
+      !formData.formHeader.lineOrRouteNumber ||
+      !formData.formHeader.direction
+    ) {
+      throw new Error("Missing required form header fields")
+    }
+
+    // Check if the form exists and was created today (in UTC-3)
+    const [existingForm] = (await sql`
+      SELECT * FROM out_of_section_forms WHERE id = ${formId}
+    `) as OutOfSectionFormDB[]
+
+    if (!existingForm) {
+      throw new Error("Form not found")
+    }
+
+    // Check if the form was created today in UTC-3 timezone
+    const todayUTC3 = new Date().toLocaleDateString("en-CA", { timeZone: "America/Argentina/Buenos_Aires" })
+    const formCreatedDateUTC3 = new Date(existingForm.created_at).toLocaleDateString("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+    })
+
+    if (formCreatedDateUTC3 !== todayUTC3) {
+      throw new Error("Forms can only be edited on the day they were created")
+    }
 
     // Update the main form
     await sql`
-      UPDATE out_of_section_inspections SET
+      UPDATE out_of_section_forms 
+      SET 
+        title = ${formData.formHeader.title},
         inspector_name = ${formData.formHeader.inspectorName},
         date = ${formData.formHeader.date},
         place_of_work = ${formData.formHeader.placeOfWork},
@@ -124,138 +340,244 @@ export async function updateOutOfSectionForm(id: number, formData: any) {
         total_of_services = ${formData.formHeader.totalOfServices},
         total_of_passengers = ${formData.formHeader.totalOfPassengers},
         total_of_oos = ${formData.formHeader.totalOfOOS},
-        total_of_passes = ${formData.formHeader.totalOfPasses}
-      WHERE id = ${id}
+        total_of_passes = ${formData.formHeader.totalOfPasses},
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${formId}
     `
 
     // Delete existing service checks
-    await sql`DELETE FROM out_of_section_service_checks WHERE form_id = ${id}`
+    await sql`
+      DELETE FROM out_of_section_service_checks WHERE form_id = ${formId}
+    `
 
-    // Insert updated service checks
-    for (const check of formData.serviceChecks) {
-      await sql`
-        INSERT INTO out_of_section_service_checks (
-          form_id, service_code, line_route_branch, exact_hour_of_schedule,
-          gps_minutes, gps_seconds, gps_status, passengers_on_board,
-          out_of_section_tickets, passes_used, observations
-        ) VALUES (
-          ${id},
-          ${check.serviceCode},
-          ${check.lineRouteBranch},
-          ${check.exactHourOfSchedule},
-          ${check.gpsStatus.minutes},
-          ${check.gpsStatus.seconds},
-          ${check.gpsStatus.status},
-          ${check.passengersOnBoard},
-          ${check.outOfSectionTickets},
-          ${check.passesUsed},
-          ${check.observations}
-        )
-      `
+    // Insert updated service checks (only those with service codes)
+    const filledServiceChecks = formData.serviceChecks.filter(
+      (check) => check.serviceCode && check.serviceCode.trim() !== "",
+    )
+
+    if (filledServiceChecks.length > 0) {
+      const serviceCheckPromises = filledServiceChecks.map((check) => {
+        return sql`
+          INSERT INTO out_of_section_service_checks (
+            form_id, service_code, line_route_branch, exact_hour_of_schedule,
+            gps_minutes, gps_seconds, gps_status, passengers_on_board,
+            out_of_section_tickets, passes_used, observations
+          ) VALUES (
+            ${formId},
+            ${check.serviceCode},
+            ${check.lineRouteBranch || ""},
+            ${check.exactHourOfSchedule || "00:00:00"},
+            ${check.gpsStatus.minutes},
+            ${check.gpsStatus.seconds},
+            ${check.gpsStatus.status},
+            ${check.passengersOnBoard},
+            ${check.outOfSectionTickets},
+            ${check.passesUsed},
+            ${check.observations || null}
+          )
+          RETURNING *
+        `
+      })
+
+      await Promise.all(serviceCheckPromises)
     }
 
-    return { success: true }
+    revalidatePath("/out-of-section")
+    revalidatePath("/dashboard")
+
+    return {
+      success: true,
+      message: "Out-of-section form updated successfully",
+      formId: formId,
+    }
   } catch (error) {
     console.error("Error updating out-of-section form:", error)
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+    return {
+      success: false,
+      message: error instanceof Error ? error.message : "Failed to update out-of-section form",
+    }
+  }
+}
+
+export async function getOutOfSectionForms(limit = 50, offset = 0) {
+  try {
+    const forms = (await sql`
+      SELECT * FROM out_of_section_forms 
+      ORDER BY date DESC, created_at DESC 
+      LIMIT ${limit} OFFSET ${offset}
+    `) as OutOfSectionFormDB[]
+
+    return {
+      success: true,
+      data: forms,
+    }
+  } catch (error) {
+    console.error("Error fetching out-of-section forms:", error)
+    return {
+      success: false,
+      message: "Failed to fetch out-of-section forms",
+      data: [],
+    }
+  }
+}
+
+export async function getOutOfSectionFormById(id: number) {
+  try {
+    const [form] = (await sql`
+      SELECT * FROM out_of_section_forms WHERE id = ${id}
+    `) as OutOfSectionFormDB[]
+
+    if (!form) {
+      return {
+        success: false,
+        message: "Out-of-section form not found",
+      }
+    }
+
+    const serviceChecks = (await sql`
+      SELECT * FROM out_of_section_service_checks 
+      WHERE form_id = ${id} 
+      ORDER BY exact_hour_of_schedule ASC
+    `) as OutOfSectionServiceCheckDB[]
+
+    const formWithChecks: OutOfSectionFormWithChecks = {
+      ...form,
+      service_checks: serviceChecks,
+    }
+
+    return {
+      success: true,
+      data: formWithChecks,
+    }
+  } catch (error) {
+    console.error("Error fetching out-of-section form:", error)
+    return {
+      success: false,
+      message: "Failed to fetch out-of-section form",
+    }
   }
 }
 
 export async function deleteOutOfSectionForm(id: number) {
   try {
-    // Delete service checks first (foreign key constraint)
-    await sql`DELETE FROM out_of_section_service_checks WHERE form_id = ${id}`
+    await sql`
+      DELETE FROM out_of_section_forms WHERE id = ${id}
+    `
 
-    // Delete the main form
-    await sql`DELETE FROM out_of_section_inspections WHERE id = ${id}`
+    revalidatePath("/out-of-section")
+    revalidatePath("/dashboard")
 
-    return { success: true }
+    return {
+      success: true,
+      message: "Out-of-section form deleted successfully",
+    }
   } catch (error) {
     console.error("Error deleting out-of-section form:", error)
-    return { success: false, error: error instanceof Error ? error.message : "Unknown error" }
+    return {
+      success: false,
+      message: "Failed to delete out-of-section form",
+    }
   }
 }
 
 export async function getOutOfSectionStats() {
   try {
-    // Get total forms count
-    const totalFormsResult = await sql`
-      SELECT COUNT(*) as count FROM out_of_section_inspections
+    // Get total forms for current month
+    const [totalForms] = await sql`
+      SELECT COUNT(*) as count FROM out_of_section_forms
+      WHERE date >= DATE_TRUNC('month', CURRENT_DATE)
     `
-    const totalForms = Number.parseInt(totalFormsResult[0].count)
 
-    // Get total service checks count
-    const totalServiceChecksResult = await sql`
-      SELECT COUNT(*) as count FROM out_of_section_service_checks
-    `
-    const totalServiceChecks = Number.parseInt(totalServiceChecksResult[0].count)
-
-    // Get recent forms (last 30 days)
-    const recentFormsResult = await sql`
-      SELECT COUNT(*) as count 
-      FROM out_of_section_inspections 
-      WHERE created_at >= NOW() - INTERVAL '30 days'
-    `
-    const recentForms = Number.parseInt(recentFormsResult[0].count)
-
-    // Get GPS status statistics
-    const gpsStatsResult = await sql`
+    // Get aggregated statistics for current month
+    const [totals] = await sql`
       SELECT 
-        gps_status,
-        COUNT(*) as count
-      FROM out_of_section_service_checks
-      GROUP BY gps_status
+        COALESCE(SUM(f.total_of_passengers), 0) as total_passengers,
+        COALESCE(SUM(f.total_of_passes), 0) as total_passes,
+        COALESCE(SUM(f.total_of_oos), 0) as total_oos
+      FROM out_of_section_forms f
+      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
     `
 
-    const gpsStats = {
-      "on-time": 0,
-      early: 0,
-      late: 0,
+    // Get statistics by place of work
+    const byPlaceOfWork = await sql`
+      SELECT 
+        f.place_of_work as place,
+        COALESCE(SUM(f.total_of_passengers), 0) as passengers,
+        COALESCE(SUM(f.total_of_passes), 0) as passes,
+        COALESCE(SUM(f.total_of_oos), 0) as oos
+      FROM out_of_section_forms f
+      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+      GROUP BY f.place_of_work
+      ORDER BY passengers DESC
+      LIMIT 10
+    `
+
+    // Get statistics by line route
+    const byLineRoute = await sql`
+      SELECT 
+        f.line_or_route_number as route,
+        COALESCE(SUM(f.total_of_passengers), 0) as passengers,
+        COALESCE(SUM(f.total_of_passes), 0) as passes,
+        COALESCE(SUM(f.total_of_oos), 0) as oos
+      FROM out_of_section_forms f
+      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+      GROUP BY f.line_or_route_number
+      ORDER BY passengers DESC
+      LIMIT 10
+    `
+
+    // Get statistics by route branch (from service checks)
+    const byRouteBranch = await sql`
+      SELECT 
+        s.line_route_branch as branch,
+        COALESCE(SUM(s.passengers_on_board), 0) as passengers,
+        COALESCE(SUM(s.passes_used), 0) as passes,
+        COALESCE(SUM(s.out_of_section_tickets), 0) as oos
+      FROM out_of_section_service_checks s
+      INNER JOIN out_of_section_forms f ON s.form_id = f.id
+      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+        AND s.line_route_branch IS NOT NULL 
+        AND s.line_route_branch != ''
+      GROUP BY s.line_route_branch
+      ORDER BY passengers DESC
+      LIMIT 10
+    `
+
+    const stats: OutOfSectionStats = {
+      totalForms: Number.parseInt(totalForms.count),
+      totalPassengers: Number.parseInt(totals.total_passengers),
+      totalPasses: Number.parseInt(totals.total_passes),
+      totalOOS: Number.parseInt(totals.total_oos),
+      byPlaceOfWork: byPlaceOfWork.map((row) => ({
+        place: row.place,
+        passengers: Number.parseInt(row.passengers),
+        passes: Number.parseInt(row.passes),
+        oos: Number.parseInt(row.oos),
+      })),
+      byLineRoute: byLineRoute.map((row) => ({
+        route: row.route,
+        passengers: Number.parseInt(row.passengers),
+        passes: Number.parseInt(row.passes),
+        oos: Number.parseInt(row.oos),
+      })),
+      byRouteBranch: byRouteBranch.map((row) => ({
+        branch: row.branch,
+        passengers: Number.parseInt(row.passengers),
+        passes: Number.parseInt(row.passes),
+        oos: Number.parseInt(row.oos),
+      })),
     }
-
-    gpsStatsResult.forEach((row) => {
-      if (row.gps_status in gpsStats) {
-        gpsStats[row.gps_status as keyof typeof gpsStats] = Number.parseInt(row.count)
-      }
-    })
-
-    // Get monthly statistics for the current year
-    const monthlyStatsResult = await sql`
-      SELECT 
-        EXTRACT(MONTH FROM date) as month,
-        COUNT(*) as forms_count,
-        SUM(total_of_services) as total_services,
-        SUM(total_of_passengers) as total_passengers,
-        SUM(total_of_oos) as total_oos
-      FROM out_of_section_inspections
-      WHERE EXTRACT(YEAR FROM date) = EXTRACT(YEAR FROM CURRENT_DATE)
-      GROUP BY EXTRACT(MONTH FROM date)
-      ORDER BY month
-    `
-
-    const monthlyStats = monthlyStatsResult.map((row) => ({
-      month: Number.parseInt(row.month),
-      formsCount: Number.parseInt(row.forms_count),
-      totalServices: Number.parseInt(row.total_services || 0),
-      totalPassengers: Number.parseInt(row.total_passengers || 0),
-      totalOOS: Number.parseInt(row.total_oos || 0),
-    }))
 
     return {
       success: true,
-      stats: {
-        totalForms,
-        totalServiceChecks,
-        recentForms,
-        gpsStats,
-        monthlyStats,
-      },
+      data: stats,
     }
   } catch (error) {
-    console.error("Error fetching out-of-section stats:", error)
+    console.error("Error fetching out-of-section statistics:", error)
     return {
       success: false,
-      error: error instanceof Error ? error.message : "Unknown error",
+      message: "Failed to fetch out-of-section statistics",
+      data: null,
     }
   }
 }
