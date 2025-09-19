@@ -1,7 +1,20 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import {
+  Plus,
+  FileText,
+  Users,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  LayoutDashboard,
+  Ticket,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
 import { deleteDailyInspectionForm } from "@/lib/actions"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -17,9 +30,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Plus, FileText, Users, Clock, CheckCircle, AlertCircle, LayoutDashboard, Ticket } from "lucide-react"
-import Link from "next/link"
 import type { OutOfSectionStats } from "@/lib/out-of-section-actions"
+import Link from "next/link"
 
 interface DailyInspectionFormDB {
   id: number
@@ -44,6 +56,8 @@ interface DashboardClientProps {
   topRoutes: { lineOrRouteNumber: string; count: number }[]
   topStops: { addressOfStop: string; count: number }[]
   oosStats: OutOfSectionStats | null
+  selectedYear: number
+  selectedMonth: number
 }
 
 // Helper function to safely format dates without timezone issues
@@ -107,7 +121,30 @@ const formatDate = (dateInput: any, options?: Intl.DateTimeFormatOptions) => {
   }
 }
 
-export function DashboardClient({ initialForms, initialStats, topRoutes, topStops, oosStats }: DashboardClientProps) {
+const monthNames = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+]
+
+export function DashboardClient({
+  initialForms,
+  initialStats,
+  topRoutes,
+  topStops,
+  oosStats,
+  selectedYear,
+  selectedMonth,
+}: DashboardClientProps) {
   const [forms, setForms] = useState(initialForms)
   const [stats, setStats] = useState(initialStats)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -115,41 +152,69 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
   const [isDeleting, setIsDeleting] = useState(false)
   const [deleteResult, setDeleteResult] = useState<{ success: boolean; message: string } | null>(null)
 
-  const handleDeleteClick = (form: DailyInspectionFormDB) => {
-    setFormToDelete(form)
-    setDeleteDialogOpen(true)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+
+  const navigateToMonth = (year: number, month: number) => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.set("year", year.toString())
+    params.set("month", month.toString())
+    router.push(`/dashboard?${params.toString()}`)
+  }
+
+  const handlePreviousMonth = () => {
+    let newMonth = selectedMonth - 1
+    let newYear = selectedYear
+
+    if (newMonth < 1) {
+      newMonth = 12
+      newYear = selectedYear - 1
+    }
+
+    navigateToMonth(newYear, newMonth)
+  }
+
+  const handleNextMonth = () => {
+    let newMonth = selectedMonth + 1
+    let newYear = selectedYear
+
+    if (newMonth > 12) {
+      newMonth = 1
+      newYear = selectedYear + 1
+    }
+
+    navigateToMonth(newYear, newMonth)
+  }
+
+  const handleMonthChange = (value: string) => {
+    const month = Number.parseInt(value)
+    navigateToMonth(selectedYear, month)
+  }
+
+  const handleYearChange = (value: string) => {
+    const year = Number.parseInt(value)
+    navigateToMonth(year, selectedMonth)
   }
 
   const handleDeleteConfirm = async () => {
-    if (!formToDelete) return
-    setIsDeleting(true)
-    setDeleteResult(null)
-
-    try {
+    if (formToDelete) {
+      setIsDeleting(true)
       const result = await deleteDailyInspectionForm(formToDelete.id)
       setDeleteResult(result)
-
-      if (result.success) {
-        setForms((prev) => prev.filter((f) => f.id !== formToDelete.id))
-        // Optimistically update stats if deletion is successful
-        if (stats) {
-          setStats((prevStats) => ({
-            ...prevStats!,
-            totalForms: prevStats!.totalForms - 1,
-          }))
-        }
-        setTimeout(() => {
-          setDeleteDialogOpen(false)
-          setFormToDelete(null)
-          setDeleteResult(null)
-        }, 1500)
-      }
-    } catch {
-      setDeleteResult({ success: false, message: "Unexpected error deleting form" })
-    } finally {
       setIsDeleting(false)
+      setDeleteDialogOpen(false)
+      setForms(forms.filter((form) => form.id !== formToDelete.id))
     }
   }
+
+  // Generate year options (current year ± 2 years)
+  const currentYear = new Date().getFullYear()
+  const yearOptions = []
+  for (let i = currentYear - 2; i <= currentYear + 2; i++) {
+    yearOptions.push(i)
+  }
+
+  const isCurrentMonth = selectedYear === currentYear && selectedMonth === new Date().getMonth() + 1
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -196,6 +261,71 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
           </div>
         </div>
 
+        {/* Month Navigation */}
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handlePreviousMonth}
+                  className="h-8 w-8 p-0 bg-transparent"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                <div className="flex items-center gap-2">
+                  <Select value={selectedMonth.toString()} onValueChange={handleMonthChange}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {monthNames.map((month, index) => (
+                        <SelectItem key={index + 1} value={(index + 1).toString()}>
+                          {month}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={selectedYear.toString()} onValueChange={handleYearChange}>
+                    <SelectTrigger className="w-20">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {yearOptions.map((year) => (
+                        <SelectItem key={year} value={year.toString()}>
+                          {year}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button variant="outline" size="sm" onClick={handleNextMonth} className="h-8 w-8 p-0 bg-transparent">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {!isCurrentMonth && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => navigateToMonth(currentYear, new Date().getMonth() + 1)}
+                  >
+                    Current Month
+                  </Button>
+                )}
+                <Badge variant={isCurrentMonth ? "default" : "secondary"}>
+                  {monthNames[selectedMonth - 1]} {selectedYear}
+                </Badge>
+              </div>
+            </div>
+          </CardHeader>
+        </Card>
+
         {/* Delete Result Alert */}
         {deleteResult && (
           <Alert className={deleteResult.success ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}>
@@ -214,42 +344,52 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Forms (current month)</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Forms ({monthNames[selectedMonth - 1]})</CardTitle>
               <FileText className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats?.totalForms ?? 0}</div>
-              <p className="text-xs text-muted-foreground">Total forms submitted in current month</p>
+              <p className="text-xs text-muted-foreground">
+                Total forms submitted in {monthNames[selectedMonth - 1]} {selectedYear}
+              </p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Service Checks (current month)</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                Total Service Checks ({monthNames[selectedMonth - 1]})
+              </CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats?.totalChecks ?? 0}</div>
-              <p className="text-xs text-muted-foreground">Service checks from current month forms</p>
+              <p className="text-xs text-muted-foreground">
+                Service checks from {monthNames[selectedMonth - 1]} {selectedYear} forms
+              </p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">On-Time Checks (current month)</CardTitle>
+              <CardTitle className="text-sm font-medium">On-Time Checks ({monthNames[selectedMonth - 1]})</CardTitle>
               <Clock className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">{getStatusCount("on-time")}</div>
-              <p className="text-xs text-muted-foreground">GPS status on-time in current month</p>
+              <p className="text-xs text-muted-foreground">
+                GPS status on-time in {monthNames[selectedMonth - 1]} {selectedYear}
+              </p>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Early/Late Checks (current month)</CardTitle>
+              <CardTitle className="text-sm font-medium">Early/Late Checks ({monthNames[selectedMonth - 1]})</CardTitle>
               <AlertCircle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-red-600">{getStatusCount("early") + getStatusCount("late")}</div>
-              <p className="text-xs text-muted-foreground">GPS status early or late in current month</p>
+              <p className="text-xs text-muted-foreground">
+                GPS status early or late in {monthNames[selectedMonth - 1]} {selectedYear}
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -259,12 +399,16 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
           {/* Top 10 Routes */}
           <Card>
             <CardHeader>
-              <CardTitle>Top 10 Routes (Current Month)</CardTitle>
+              <CardTitle>
+                Top 10 Routes ({monthNames[selectedMonth - 1]} {selectedYear})
+              </CardTitle>
               <CardDescription>Most frequently inspected line or route numbers.</CardDescription>
             </CardHeader>
             <CardContent>
               {topRoutes.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No route data for the current month.</p>
+                <p className="text-sm text-muted-foreground">
+                  No route data for {monthNames[selectedMonth - 1]} {selectedYear}.
+                </p>
               ) : (
                 <ul className="space-y-2">
                   {topRoutes.map((route, index) => (
@@ -281,12 +425,16 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
           {/* Top 20 Stops */}
           <Card>
             <CardHeader>
-              <CardTitle>Top 20 Stops (Current Month)</CardTitle>
+              <CardTitle>
+                Top 20 Stops ({monthNames[selectedMonth - 1]} {selectedYear})
+              </CardTitle>
               <CardDescription>Most frequently inspected addresses of stops.</CardDescription>
             </CardHeader>
             <CardContent>
               {topStops.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No stop data for the current month.</p>
+                <p className="text-sm text-muted-foreground">
+                  No stop data for {monthNames[selectedMonth - 1]} {selectedYear}.
+                </p>
               ) : (
                 <ul className="space-y-2">
                   {topStops.map((stop, index) => (
@@ -306,15 +454,19 @@ export function DashboardClient({ initialForms, initialStats, topRoutes, topStop
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Ticket className="w-5 h-5 text-orange-600" />
-              Recent Out-Of-Section Tickets (Pasados) - Current Month
+              Recent Out-Of-Section Tickets (Pasados) - {monthNames[selectedMonth - 1]} {selectedYear}
             </CardTitle>
-            <CardDescription>Statistics for out-of-section tickets in the current month</CardDescription>
+            <CardDescription>
+              Statistics for out-of-section tickets in {monthNames[selectedMonth - 1]} {selectedYear}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {!oosStats ? (
               <div className="text-center py-8 text-gray-500">
                 <Ticket className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>No out-of-section data available for the current month.</p>
+                <p>
+                  No out-of-section data available for {monthNames[selectedMonth - 1]} {selectedYear}.
+                </p>
                 <Link href="/out-of-section">
                   <Button className="mt-4 bg-transparent" variant="outline">
                     Create Out-of-Section Form

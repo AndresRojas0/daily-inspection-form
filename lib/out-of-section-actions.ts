@@ -480,34 +480,39 @@ export async function deleteOutOfSectionForm(id: number) {
   }
 }
 
-export async function getOutOfSectionStats() {
+export async function getOutOfSectionStats(year?: number, month?: number) {
   try {
-    // Get total forms for current month
-    const [totalForms] = await sql`
-      SELECT COUNT(*) as count FROM out_of_section_forms
-      WHERE date >= DATE_TRUNC('month', CURRENT_DATE)
-    `
+    let whereClause = `WHERE date >= DATE_TRUNC('month', CURRENT_DATE)`
 
-    // Get aggregated statistics for current month
-    const [totals] = await sql`
+    if (year && month) {
+      // Create date range for the specific month/year
+      const startDate = `${year}-${month.toString().padStart(2, "0")}-01`
+      const endDate = month === 12 ? `${year + 1}-01-01` : `${year}-${(month + 1).toString().padStart(2, "0")}-01`
+
+      whereClause = `WHERE date >= '${startDate}'::date AND date < '${endDate}'::date`
+    }
+
+    // Get overall statistics
+    const [overallStats] = await sql`
       SELECT 
-        COALESCE(SUM(f.total_of_passengers), 0) as total_passengers,
-        COALESCE(SUM(f.total_of_passes), 0) as total_passes,
-        COALESCE(SUM(f.total_of_oos), 0) as total_oos
-      FROM out_of_section_forms f
-      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+        COUNT(*) as total_forms,
+        COALESCE(SUM(total_of_passengers), 0) as total_passengers,
+        COALESCE(SUM(total_of_passes), 0) as total_passes,
+        COALESCE(SUM(total_of_oos), 0) as total_oos
+      FROM out_of_section_forms 
+      ${sql.unsafe(whereClause)}
     `
 
     // Get statistics by place of work
     const byPlaceOfWork = await sql`
       SELECT 
-        f.place_of_work as place,
-        COALESCE(SUM(f.total_of_passengers), 0) as passengers,
-        COALESCE(SUM(f.total_of_passes), 0) as passes,
-        COALESCE(SUM(f.total_of_oos), 0) as oos
-      FROM out_of_section_forms f
-      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
-      GROUP BY f.place_of_work
+        place_of_work as place,
+        COALESCE(SUM(total_of_passengers), 0) as passengers,
+        COALESCE(SUM(total_of_passes), 0) as passes,
+        COALESCE(SUM(total_of_oos), 0) as oos
+      FROM out_of_section_forms 
+      ${sql.unsafe(whereClause)}
+      GROUP BY place_of_work
       ORDER BY passengers DESC
       LIMIT 10
     `
@@ -515,13 +520,13 @@ export async function getOutOfSectionStats() {
     // Get statistics by line route
     const byLineRoute = await sql`
       SELECT 
-        f.line_or_route_number as route,
-        COALESCE(SUM(f.total_of_passengers), 0) as passengers,
-        COALESCE(SUM(f.total_of_passes), 0) as passes,
-        COALESCE(SUM(f.total_of_oos), 0) as oos
-      FROM out_of_section_forms f
-      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
-      GROUP BY f.line_or_route_number
+        line_or_route_number as route,
+        COALESCE(SUM(total_of_passengers), 0) as passengers,
+        COALESCE(SUM(total_of_passes), 0) as passes,
+        COALESCE(SUM(total_of_oos), 0) as oos
+      FROM out_of_section_forms 
+      ${sql.unsafe(whereClause)}
+      GROUP BY line_or_route_number
       ORDER BY passengers DESC
       LIMIT 10
     `
@@ -535,7 +540,7 @@ export async function getOutOfSectionStats() {
         COALESCE(SUM(s.out_of_section_tickets), 0) as oos
       FROM out_of_section_service_checks s
       INNER JOIN out_of_section_forms f ON s.form_id = f.id
-      WHERE f.date >= DATE_TRUNC('month', CURRENT_DATE)
+      ${sql.unsafe(whereClause.replace("WHERE date", "WHERE f.date"))}
         AND s.line_route_branch IS NOT NULL 
         AND s.line_route_branch != ''
       GROUP BY s.line_route_branch
@@ -544,10 +549,10 @@ export async function getOutOfSectionStats() {
     `
 
     const stats: OutOfSectionStats = {
-      totalForms: Number.parseInt(totalForms.count),
-      totalPassengers: Number.parseInt(totals.total_passengers),
-      totalPasses: Number.parseInt(totals.total_passes),
-      totalOOS: Number.parseInt(totals.total_oos),
+      totalForms: Number.parseInt(overallStats?.total_forms || "0"),
+      totalPassengers: Number.parseInt(overallStats?.total_passengers || "0"),
+      totalPasses: Number.parseInt(overallStats?.total_passes || "0"),
+      totalOOS: Number.parseInt(overallStats?.total_oos || "0"),
       byPlaceOfWork: byPlaceOfWork.map((row) => ({
         place: row.place,
         passengers: Number.parseInt(row.passengers),

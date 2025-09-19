@@ -371,14 +371,60 @@ export async function deleteDailyInspectionForm(id: number) {
   }
 }
 
-export async function getInspectionStats() {
+export async function getInspectionStats(year?: number, month?: number) {
   try {
+    if (year && month) {
+      // Create date range for the specific month/year
+      const startDate = `${year}-${month.toString().padStart(2, "0")}-01`
+      const endDate = month === 12 ? `${year + 1}-01-01` : `${year}-${(month + 1).toString().padStart(2, "0")}-01`
+
+      const [totalForms] = await sql`
+        SELECT COUNT(*) as count FROM daily_inspection_forms
+        WHERE date >= ${startDate}::date AND date < ${endDate}::date
+      `
+
+      const [totalChecks] = await sql`
+        SELECT COUNT(s.*) as count 
+        FROM service_checks s
+        INNER JOIN daily_inspection_forms f ON s.form_id = f.id
+        WHERE f.date >= ${startDate}::date AND f.date < ${endDate}::date
+      `
+
+      const [recentForms] = await sql`
+        SELECT COUNT(*) as count FROM daily_inspection_forms 
+        WHERE date >= ${startDate}::date AND date < ${endDate}::date
+      `
+
+      const statusStats = await sql`
+        SELECT 
+          s.gps_status,
+          COUNT(*) as count
+        FROM service_checks s
+        INNER JOIN daily_inspection_forms f ON s.form_id = f.id
+        WHERE f.date >= ${startDate}::date AND f.date < ${endDate}::date
+        GROUP BY s.gps_status
+      `
+
+      return {
+        success: true,
+        data: {
+          totalForms: Number.parseInt(totalForms.count),
+          totalChecks: Number.parseInt(totalChecks.count),
+          recentForms: Number.parseInt(recentForms.count),
+          statusStats: statusStats.map((stat) => ({
+            status: stat.gps_status,
+            count: Number.parseInt(stat.count),
+          })),
+        },
+      }
+    }
+
+    // Default to current month if no year/month specified
     const [totalForms] = await sql`
       SELECT COUNT(*) as count FROM daily_inspection_forms
       WHERE date >= DATE_TRUNC('month', CURRENT_DATE)
     `
 
-    // Modified query to count service checks only from forms in the current month
     const [totalChecks] = await sql`
       SELECT COUNT(s.*) as count 
       FROM service_checks s
@@ -445,8 +491,35 @@ export async function debugDatabaseData() {
   }
 }
 
-export async function getTopRoutes(limit = 10) {
+export async function getTopRoutes(limit = 10, year?: number, month?: number) {
   try {
+    if (year && month) {
+      // Create date range for the specific month/year
+      const startDate = `${year}-${month.toString().padStart(2, "0")}-01`
+      const endDate = month === 12 ? `${year + 1}-01-01` : `${year}-${(month + 1).toString().padStart(2, "0")}-01`
+
+      const topRoutes = await sql`
+        SELECT
+          line_or_route_number,
+          COUNT(*) as count
+        FROM service_checks s
+        INNER JOIN daily_inspection_forms f ON s.form_id = f.id
+        WHERE f.date >= ${startDate}::date AND f.date < ${endDate}::date
+        GROUP BY line_or_route_number
+        ORDER BY count DESC
+        LIMIT ${limit}
+      `
+
+      return {
+        success: true,
+        data: topRoutes.map((row) => ({
+          lineOrRouteNumber: row.line_or_route_number,
+          count: Number.parseInt(row.count),
+        })),
+      }
+    }
+
+    // Default to current month
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
     const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
@@ -479,8 +552,35 @@ export async function getTopRoutes(limit = 10) {
   }
 }
 
-export async function getTopStops(limit = 20) {
+export async function getTopStops(limit = 20, year?: number, month?: number) {
   try {
+    if (year && month) {
+      // Create date range for the specific month/year
+      const startDate = `${year}-${month.toString().padStart(2, "0")}-01`
+      const endDate = month === 12 ? `${year + 1}-01-01` : `${year}-${(month + 1).toString().padStart(2, "0")}-01`
+
+      const topStops = await sql`
+        SELECT
+          address_of_stop,
+          COUNT(*) as count
+        FROM service_checks s
+        INNER JOIN daily_inspection_forms f ON s.form_id = f.id
+        WHERE f.date >= ${startDate}::date AND f.date < ${endDate}::date
+        GROUP BY address_of_stop
+        ORDER BY count DESC
+        LIMIT ${limit}
+      `
+
+      return {
+        success: true,
+        data: topStops.map((row) => ({
+          addressOfStop: row.address_of_stop,
+          count: Number.parseInt(row.count),
+        })),
+      }
+    }
+
+    // Default to current month
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
     const startOfNextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1)
