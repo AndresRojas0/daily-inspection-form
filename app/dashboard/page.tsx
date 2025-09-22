@@ -15,8 +15,10 @@ export default async function Dashboard({ searchParams }: DashboardProps) {
   const selectedYear = searchParams.year ? Number.parseInt(searchParams.year) : currentYear
   const selectedMonth = searchParams.month ? Number.parseInt(searchParams.month) : currentMonth
 
+  console.log("Dashboard loading for:", { selectedYear, selectedMonth })
+
   const [formsResult, statsResult, topRoutesResult, topStopsResult, oosStatsResult] = await Promise.all([
-    getDailyInspectionForms(20),
+    getDailyInspectionForms(20, selectedYear, selectedMonth), // Pass month/year parameters
     getInspectionStats(selectedYear, selectedMonth),
     getTopRoutes(10, selectedYear, selectedMonth), // Pass month/year parameters
     getTopStops(20, selectedYear, selectedMonth), // Pass month/year parameters
@@ -28,6 +30,14 @@ export default async function Dashboard({ searchParams }: DashboardProps) {
   const topRoutes = topRoutesResult.success ? topRoutesResult.data : []
   const topStops = topStopsResult.success ? topStopsResult.data : []
   const oosStats = oosStatsResult.success ? oosStatsResult.data : null
+
+  console.log("Dashboard data loaded:", {
+    formsCount: forms.length,
+    stats,
+    topRoutesCount: topRoutes.length,
+    topStopsCount: topStops.length,
+    oosStats,
+  })
 
   return (
     <DashboardClient

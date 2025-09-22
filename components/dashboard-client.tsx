@@ -15,7 +15,7 @@ import {
   ChevronRight,
 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { deleteDailyInspectionForm } from "@/lib/actions"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -155,7 +155,20 @@ export function DashboardClient({
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  // Update local state when props change (when month/year changes)
+  useEffect(() => {
+    console.log("Dashboard client updating with new data:", {
+      formsCount: initialForms.length,
+      stats: initialStats,
+      selectedYear,
+      selectedMonth,
+    })
+    setForms(initialForms)
+    setStats(initialStats)
+  }, [initialForms, initialStats, selectedYear, selectedMonth])
+
   const navigateToMonth = (year: number, month: number) => {
+    console.log("Navigating to:", { year, month })
     const params = new URLSearchParams(searchParams.toString())
     params.set("year", year.toString())
     params.set("month", month.toString())
@@ -204,6 +217,14 @@ export function DashboardClient({
       setIsDeleting(false)
       setDeleteDialogOpen(false)
       setForms(forms.filter((form) => form.id !== formToDelete.id))
+
+      // Update stats optimistically
+      if (result.success && stats) {
+        setStats({
+          ...stats,
+          totalForms: Math.max(0, stats.totalForms - 1),
+        })
+      }
     }
   }
 
@@ -232,6 +253,8 @@ export function DashboardClient({
   const getStatusCount = (status: string) => {
     return stats?.statusStats.find((s) => s.status === status)?.count || 0
   }
+
+  console.log("Dashboard client rendering with stats:", stats)
 
   return (
     <div className="min-h-screen bg-gray-50 p-4">
@@ -340,7 +363,7 @@ export function DashboardClient({
           </Alert>
         )}
 
-        {/* Summary Cards */}
+        {/* Summary Cards - These will now update based on selected month */}
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
